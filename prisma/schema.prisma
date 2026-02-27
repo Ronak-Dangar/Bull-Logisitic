@@ -1,0 +1,269 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  LM
+  CM
+}
+
+enum LocationType {
+  CENTER
+  VILLAGE
+}
+
+enum PickupLocationType {
+  CENTER
+  BFH
+}
+
+enum RequestStatus {
+  SUBMITTED
+  FINDING_VEHICLE
+  PROCESSED
+  OVER_TO_NEXT
+  REJECTED
+}
+
+enum LoadingStatus {
+  PENDING
+  LOADED
+}
+
+enum DeliveryStatus {
+  SCHEDULED
+  LOADING
+  IN_TRANSIT
+  UNLOADING
+  COMPLETED
+}
+
+enum UrgentApprovalStatus {
+  PENDING
+  APPROVED
+  DENIED
+}
+
+// ─── Access & Infrastructure ─────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  phone        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(CM)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  centerMappings      UserCenterMapping[]
+  masterRequests      MasterRequest[]     @relation("cm_requests")
+  approvedRequests    MasterRequest[]     @relation("approved_requests")
+  sentMessages        RequestMessage[]
+  activityLogs        ActivityLog[]
+  deliveryDetails     DeliveryDetail[]
+  pushSubscriptions   PushSubscription[]
+  urgentRequests      UrgentApproval[]    @relation("urgent_requests")
+  urgentResolutions   UrgentApproval[]    @relation("urgent_resolutions")
+
+  @@map("users")
+}
+
+model Center {
+  id           String       @id @default(cuid())
+  centerName   String       @map("center_name")
+  locationType LocationType @default(CENTER) @map("location_type")
+  address      String?
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  userMappings UserCenterMapping[]
+  childPickups ChildPickup[]
+
+  @@map("centers")
+}
+
+model Factory {
+  id           String   @id @default(cuid())
+  factoryName  String   @map("factory_name")
+  location     String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  masterRequests MasterRequest[]
+  deliveryDetails DeliveryDetail[]
+
+  @@map("factories")
+}
+
+model UserCenterMapping {
+  id       String @id @default(cuid())
+  userId   String @map("user_id")
+  centerId String @map("center_id")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  center Center @relation(fields: [centerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, centerId])
+  @@map("user_center_mapping")
+}
+
+// ─── The Demand Layer ────────────────────────────────────
+
+model MasterRequest {
+  id               String        @id @default(cuid())
+  cmId             String        @map("cm_id")
+  commodity        String        @default("Castor")
+  totalEstWeight   Float         @default(0) @map("total_est_weight")
+  totalEstBags     Int           @default(0) @map("total_est_bags")
+  factoryId        String?       @map("factory_id")
+  deliveryLocation String        @map("delivery_location")
+  pickupDate       DateTime      @map("pickup_date")
+  status           RequestStatus @default(SUBMITTED)
+  note             String?
+  shipmentId       String?       @map("shipment_id")
+  approvedById     String?       @map("approved_by_id")
+  approvedAt       DateTime?     @map("approved_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  cm               User            @relation("cm_requests", fields: [cmId], references: [id])
+  approvedBy       User?           @relation("approved_requests", fields: [approvedById], references: [id])
+  factory          Factory?        @relation(fields: [factoryId], references: [id])
+  childPickups     ChildPickup[]
+  deliveryDetail   DeliveryDetail?
+  messages         RequestMessage[]
+  urgentApprovals  UrgentApproval[]
+
+  @@map("master_requests")
+}
+
+model ChildPickup {
+  id               String            @id @default(cuid())
+  parentId         String            @map("parent_id")
+  centerId         String?           @map("center_id")
+  pickupLocType    PickupLocationType @default(CENTER) @map("pickup_loc_type")
+  villageName      String?           @map("village_name")
+  supervisorName   String?           @map("supervisor_name")
+  estWeight        Float             @default(0) @map("est_weight")
+  estBags          Int               @default(0) @map("est_bags")
+  actualWeight     Float?            @map("actual_weight")
+  actualBags       Int?              @map("actual_bags")
+  stopSequence     Int               @default(0) @map("stop_sequence")
+  loadingStatus    LoadingStatus     @default(PENDING) @map("loading_status")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  parent MasterRequest @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  center Center?       @relation(fields: [centerId], references: [id])
+
+  @@map("child_pickups")
+}
+
+// ─── The Execution Layer ─────────────────────────────────
+
+model DeliveryDetail {
+  id               String         @id @default(cuid())
+  masterReqId      String         @unique @map("master_req_id")
+  factoryId        String?        @map("factory_id")
+  vehicleNumber    String?        @map("vehicle_number")
+  driverName       String?        @map("driver_name")
+  driverContact    String?        @map("driver_contact")
+  transporterName  String?        @map("transporter_name")
+  transpContact    String?        @map("transp_contact")
+  deliveryLoc      String?        @map("delivery_loc")
+  status           DeliveryStatus @default(SCHEDULED)
+  expDeliveryDt    DateTime?      @map("exp_delivery_dt")
+  actualDeliveryDt DateTime?      @map("actual_delivery_dt")
+  unloadingDt      DateTime?      @map("unloading_dt")
+  ratePerTon       Float?         @map("rate_per_ton")
+  totalWeightFinal Float?         @map("total_weight_final")
+  idealPayment     Float?         @map("ideal_payment")
+  miscAmount       Float?         @map("misc_amount")
+  waitingCharges   Float?         @map("waiting_charges")
+  advancePaid      Float?         @map("advance_paid")
+  actuallyPaid     Float?         @map("actually_paid")
+  totalBags        Int?           @map("total_bags")
+  invoiceNo        String?        @map("invoice_no")
+  createdById      String?        @map("created_by_id")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  masterRequest MasterRequest @relation(fields: [masterReqId], references: [id], onDelete: Cascade)
+  factory       Factory?      @relation(fields: [factoryId], references: [id])
+  createdBy     User?         @relation(fields: [createdById], references: [id])
+
+  @@map("delivery_details")
+}
+
+// ─── Intelligence Layer ──────────────────────────────────
+
+model RequestMessage {
+  id            String   @id @default(cuid())
+  masterReqId   String   @map("master_req_id")
+  senderId      String   @map("sender_id")
+  messageBody   String   @map("message_body")
+  attachmentUrl String?  @map("attachment_url")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  masterRequest MasterRequest @relation(fields: [masterReqId], references: [id], onDelete: Cascade)
+  sender        User          @relation(fields: [senderId], references: [id])
+
+  @@map("request_messages")
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String   @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  oldValue   Json?    @map("old_value")
+  newValue   Json?    @map("new_value")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("activity_logs")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
+}
+
+// ─── Urgent Approval Layer ───────────────────────────────
+
+model UrgentApproval {
+  id            String               @id @default(cuid())
+  masterReqId   String               @map("master_req_id")
+  requestedById String               @map("requested_by_id")
+  status        UrgentApprovalStatus @default(PENDING)
+  changeType    String               @map("change_type")
+  pendingData   Json                 @map("pending_data")
+  reason        String?
+  resolvedById  String?              @map("resolved_by_id")
+  resolvedAt    DateTime?            @map("resolved_at")
+  createdAt     DateTime             @default(now()) @map("created_at")
+
+  masterRequest MasterRequest @relation(fields: [masterReqId], references: [id], onDelete: Cascade)
+  requestedBy   User          @relation("urgent_requests", fields: [requestedById], references: [id])
+  resolvedBy    User?         @relation("urgent_resolutions", fields: [resolvedById], references: [id])
+
+  @@map("urgent_approvals")
+}
