@@ -579,6 +579,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                             <EditableField id={del.id} fieldKey="driverName" label="Driver" type="text" initialValue={del.driverName} />
                             <EditableField id={del.id} fieldKey="driverContact" label="Driver Contact" type="text" initialValue={del.driverContact} />
                             <EditableField id={del.id} fieldKey="transporterName" label="Transporter" type="text" initialValue={del.transporterName} />
+                            <EditableField id={del.id} fieldKey="invoiceNo" label="Invoice No" type="text" initialValue={del.invoiceNo} />
                             <div>
                               <span className="text-gray-500 text-xs">Total Cargo</span>
                               <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">
