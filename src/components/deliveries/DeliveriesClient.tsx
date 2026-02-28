@@ -124,7 +124,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center p-0 sm:items-center sm:p-4">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -193,7 +193,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2 pt-1">
+        <div className="sticky bottom-0 flex gap-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-white dark:bg-gray-900">
           <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
           <button onClick={handleConfirm} disabled={loading} className="btn-primary flex-1 text-sm">
             {loading ? (
