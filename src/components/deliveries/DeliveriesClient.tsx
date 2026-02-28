@@ -210,6 +210,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
 
 interface DeliveriesClientProps {
   deliveries: any[];
+  initialFilter?: string;
 }
 
 // ─── Invoice Prompt Popup ────────────────────────────────
@@ -253,11 +254,11 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
   );
 }
 
-export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesClientProps) {
+export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter }: DeliveriesClientProps) {
   const router = useRouter();
   const [deliveries, setDeliveries] = useState(initialDeliveries);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState(initialFilter || "ALL");
   const [completingDelivery, setCompletingDelivery] = useState<any>(null);
   const [invoicePromptDelivery, setInvoicePromptDelivery] = useState<any>(null);
   const [chatReqId, setChatReqId] = useState<string | null>(null);
