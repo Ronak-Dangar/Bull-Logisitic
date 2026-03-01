@@ -13,6 +13,14 @@ export const metadata: Metadata = {
   title: "Bull Logistic — Delivery Management",
   description: "Multi-stop Castor pickup management system for Bull Agritech",
   manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Bull Logistic",
+  },
+  icons: {
+    apple: "/logo-192x192.png",
+  },
 };
 
 export default function RootLayout({
@@ -22,6 +30,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js');
+                });
+              }
+            `,
+          }}
+        />
+      </head>
       <body className={`${inter.variable} font-sans antialiased`}>
         <AuthProvider>
           <ThemeProvider>
