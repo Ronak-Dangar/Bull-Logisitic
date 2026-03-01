@@ -4,16 +4,25 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
-  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus
+  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2
 } from "lucide-react";
 import { formatWeight, formatDate, formatCurrency, getStatusColor, cn } from "@/lib/utils";
-import { updateDeliveryStatus, updateDelivery } from "@/actions/deliveries";
+import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus } from "@/actions/deliveries";
 import { getEntityActivityLogs } from "@/actions/admin";
 import { useRouter } from "next/navigation";
 import { ChatPopup } from "../shared/ChatPopup";
 import { LogDiff } from "../shared/LogDiff";
 
 const STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "UNLOADING", "COMPLETED"];
+
+// Color map for each status step
+const STEP_COLORS: Record<string, { done: string; text: string; line: string }> = {
+  SCHEDULED:  { done: "bg-blue-500",    text: "text-blue-500",    line: "bg-blue-500" },
+  LOADING:    { done: "bg-amber-500",   text: "text-amber-500",   line: "bg-amber-500" },
+  IN_TRANSIT: { done: "bg-violet-500",  text: "text-violet-500",  line: "bg-violet-500" },
+  UNLOADING:  { done: "bg-orange-500",  text: "text-orange-500",  line: "bg-orange-500" },
+  COMPLETED:  { done: "bg-emerald-500", text: "text-emerald-500", line: "bg-emerald-500" },
+};
 
 function groupLogsByDate(logs: any[]) {
   const groups: Record<string, any[]> = {};
@@ -115,7 +124,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[70] flex items-end justify-center p-0 sm:items-center sm:p-4">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -123,47 +132,47 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
         onClick={onClose}
       />
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="relative w-full max-w-md card p-6 z-10 space-y-4"
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative w-full max-w-md card p-4 z-10 space-y-3 rounded-b-none sm:rounded-b-2xl max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+          <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
             Complete Delivery
           </h3>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Warning */}
-        <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-800 dark:text-amber-300 leading-relaxed">
-            Please enter the final balance amount to be paid. This is the remaining amount <strong>after deducting</strong> advance, miscellaneous charges, and waiting charges from the ideal payment.
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
+            Enter the final balance amount after deducting advance, misc charges, and waiting charges.
           </p>
         </div>
 
         {/* Financial Breakdown */}
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-gray-800">
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
             <span className="text-gray-500">Ideal Payment</span>
             <span className="font-semibold text-gray-900 dark:text-white">{formatCurrency(ideal)}</span>
           </div>
-          <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
             <span className="text-gray-500">− Advance Paid</span>
             <span className="font-medium text-red-500">−{formatCurrency(advance)}</span>
           </div>
-          <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
             <span className="text-gray-500">− Misc Amount</span>
             <span className="font-medium text-red-500">−{formatCurrency(misc)}</span>
           </div>
-          <div className="flex justify-between py-1.5 border-b border-gray-100 dark:border-gray-800">
+          <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
             <span className="text-gray-500">− Waiting Charges</span>
             <span className="font-medium text-red-500">−{formatCurrency(waiting)}</span>
           </div>
-          <div className="flex justify-between py-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 -mx-1">
+          <div className="flex justify-between py-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3">
             <span className="font-semibold text-emerald-700 dark:text-emerald-400">Balance Due</span>
             <span className="font-bold text-emerald-700 dark:text-emerald-400">{formatCurrency(balanceDue)}</span>
           </div>
@@ -171,22 +180,22 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
 
         {/* Balance Amount Input */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Balance Amount Paid (₹) *</label>
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Balance Amount Paid (₹) *</label>
           <input
             type="number"
             step="0.01"
             value={balanceAmount}
             onChange={(e) => setBalanceAmount(e.target.value)}
-            className="input"
+            className="input text-sm"
             autoFocus
             required
           />
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 pt-2">
-          <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-          <button onClick={handleConfirm} disabled={loading} className="btn-primary flex-1">
+        <div className="sticky bottom-0 flex gap-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] bg-white dark:bg-gray-900">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
+          <button onClick={handleConfirm} disabled={loading} className="btn-primary flex-1 text-sm">
             {loading ? (
               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
@@ -201,6 +210,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
 
 interface DeliveriesClientProps {
   deliveries: any[];
+  initialFilter?: string;
 }
 
 // ─── Invoice Prompt Popup ────────────────────────────────
@@ -216,26 +226,26 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="relative w-full max-w-sm card p-6 z-10 space-y-4">
+      <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-sm card p-4 z-10 space-y-3 rounded-b-none sm:rounded-b-2xl">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <FileText className="w-5 h-5 text-amber-500" /> Invoice Required
+          <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <FileText className="w-4 h-4 text-amber-500" /> Invoice Required
           </h3>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"><X className="w-4 h-4" /></button>
         </div>
-        <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-800 dark:text-amber-300">An invoice number is required before marking the delivery as <strong>In Transit</strong>. Please enter it below.</p>
+        <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800 dark:text-amber-300">An invoice number is required before marking as <strong>In Transit</strong>.</p>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Invoice Number *</label>
-          <input type="text" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} className="input" placeholder="e.g. INV-2024-001" autoFocus onKeyDown={(e) => e.key === "Enter" && handleConfirm()} />
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Invoice Number *</label>
+          <input type="text" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} className="input text-sm" placeholder="e.g. INV-2024-001" autoFocus onKeyDown={(e) => e.key === "Enter" && handleConfirm()} />
         </div>
-        <div className="flex gap-3">
-          <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-          <button onClick={handleConfirm} disabled={loading || !invoiceNo.trim()} className="btn-primary flex-1">
+        <div className="flex gap-2">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1 text-sm">Cancel</button>
+          <button onClick={handleConfirm} disabled={loading || !invoiceNo.trim()} className="btn-primary flex-1 text-sm">
             {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Save & Continue"}
           </button>
         </div>
@@ -244,11 +254,11 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
   );
 }
 
-export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesClientProps) {
+export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter }: DeliveriesClientProps) {
   const router = useRouter();
   const [deliveries, setDeliveries] = useState(initialDeliveries);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState(initialFilter || "ALL");
   const [completingDelivery, setCompletingDelivery] = useState<any>(null);
   const [invoicePromptDelivery, setInvoicePromptDelivery] = useState<any>(null);
   const [chatReqId, setChatReqId] = useState<string | null>(null);
@@ -256,13 +266,25 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
   const [showActivity, setShowActivity] = useState<string | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
 
-  // Sync from server when props change, and setup local optimistic listner
+  // Helper: refresh activity logs for a delivery if the panel is open or logs are cached
+  const refreshActivityLogs = async (entityId: string) => {
+    try {
+      const logs = await getEntityActivityLogs("DeliveryDetail", entityId);
+      setActivityLogs((prev) => ({ ...prev, [entityId]: JSON.parse(JSON.stringify(logs)) }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Sync from server when props change, and setup local optimistic listener
   useEffect(() => { 
     setDeliveries(initialDeliveries); 
     
-    const handleLocalUpdate = (e: any) => {
+    const handleLocalUpdate = async (e: any) => {
       const { id, fieldKey, finalVal } = e.detail;
       setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, [fieldKey]: finalVal } : d));
+      // Auto-refresh activity logs for this delivery
+      await refreshActivityLogs(id);
     };
 
     window.addEventListener('delivery-updated', handleLocalUpdate);
@@ -291,8 +313,20 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
       // Optimistic update
       setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, status: nextStatus } : d));
       await updateDeliveryStatus(id, nextStatus as any);
+      await refreshActivityLogs(id);
       router.refresh();
     }
+  };
+
+  const handleStatusUndo = async (id: string, currentStatus: string) => {
+    const currentIndex = STEPS.indexOf(currentStatus);
+    if (currentIndex <= 0) return;
+    const prevStatus = STEPS[currentIndex - 1];
+    // Optimistic update
+    setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, status: prevStatus } : d));
+    await undoDeliveryStatus(id);
+    await refreshActivityLogs(id);
+    router.refresh();
   };
 
   const handleInvoiceConfirm = async (invoiceNo: string) => {
@@ -301,6 +335,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
     setDeliveries((prev) => prev.map((d: any) => d.id === invoicePromptDelivery.id ? { ...d, status: "IN_TRANSIT", invoiceNo } : d));
     await updateDelivery(invoicePromptDelivery.id, { invoiceNo });
     await updateDeliveryStatus(invoicePromptDelivery.id, "IN_TRANSIT" as any);
+    await refreshActivityLogs(invoicePromptDelivery.id);
     setInvoicePromptDelivery(null);
     router.refresh();
   };
@@ -311,6 +346,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
     setDeliveries((prev) => prev.map((d: any) => d.id === completingDelivery.id ? { ...d, status: "COMPLETED", actuallyPaid: balanceAmount } : d));
     await updateDelivery(completingDelivery.id, { actuallyPaid: balanceAmount });
     await updateDeliveryStatus(completingDelivery.id, "COMPLETED" as any);
+    await refreshActivityLogs(completingDelivery.id);
     setCompletingDelivery(null);
     router.refresh();
   };
@@ -321,14 +357,8 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
       return;
     }
     setShowActivity(entityId);
-    if (!activityLogs[entityId]) {
-      try {
-        const logs = await getEntityActivityLogs("DeliveryDetail", entityId);
-        setActivityLogs((prev) => ({ ...prev, [entityId]: JSON.parse(JSON.stringify(logs)) }));
-      } catch (err) {
-        console.error(err);
-      }
-    }
+    // Always fetch fresh logs when opening the panel
+    await refreshActivityLogs(entityId);
   };
 
   return (
@@ -366,14 +396,14 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
             >
               <div
                 onClick={() => setExpandedId(expandedId === del.id ? null : del.id)}
-                className="w-full p-4 flex items-center gap-4 text-left cursor-pointer"
+                className="w-full p-3 flex items-center gap-3 text-left cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center flex-shrink-0">
-                  <Truck className="w-5 h-5 text-cyan-500" />
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center shrink-0">
+                  <Truck className="w-4.5 h-4.5 text-cyan-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 flex-wrap">
-                    <div className="flex-1 min-w-0 pr-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
                       <EditableField 
                          id={del.id} 
                          fieldKey="vehicleNumber" 
@@ -382,29 +412,28 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                          initialValue={del.vehicleNumber} 
                          validate={(v: string) => /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$/.test(v.toUpperCase()) ? null : "Invalid format (e.g. GJ01AB1234)"}
                       />
-                      <div className="flex items-center gap-2 mt-1">
-                        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5 break-all">
-                          <MapPin className="w-4 h-4" />
-                          {del.factory?.factoryName || del.deliveryLoc}
-                        </p>
-                        {del.invoiceNo && (
-                          <span className="text-xs font-semibold text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700">
-                            INV: {del.invoiceNo}
-                          </span>
-                        )}
-                      </div>
                     </div>
-                    <span className={`badge text-[10px] w-fit ${getStatusColor(del.status)}`}>
+                    <span className={`badge text-[10px] shrink-0 ${getStatusColor(del.status)}`}>
                       {del.status.replace(/_/g, " ")}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500 flex-wrap">
-                    <span className="flex items-center gap-1"><User2 className="w-3 h-3" />{del.driverName || "No driver"}</span>
-                    <span className="flex items-center gap-1"><Package className="w-3 h-3" />{del.masterRequest?.commodity}</span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-1 truncate">
+                      <MapPin className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{del.factory?.factoryName || del.deliveryLoc}</span>
+                    </p>
+                    {del.invoiceNo && (
+                      <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 shrink-0">
+                        {del.invoiceNo}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500">
+                    <span className="flex items-center gap-1 truncate"><User2 className="w-3 h-3 shrink-0" />{del.driverName || "No driver"}</span>
+                    <span className="flex items-center gap-1 truncate"><Package className="w-3 h-3 shrink-0" />{del.masterRequest?.commodity}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* Chat popup trigger */}
+                <div className="flex items-center gap-1 shrink-0">
                   {del.masterRequest?.id && (
                     <button
                       onClick={(e) => { e.stopPropagation(); setChatReqId(del.masterRequest.id); }}
@@ -420,7 +449,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                     </button>
                   )}
                   <ChevronDown className={cn(
-                    "w-5 h-5 text-gray-400 transition-transform flex-shrink-0",
+                    "w-4 h-4 text-gray-400 transition-transform shrink-0",
                     expandedId === del.id && "rotate-180"
                   )} />
                 </div>
@@ -435,19 +464,23 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                     transition={{ duration: 0.25 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-800 pt-3 space-y-4">
+                    <div className="px-3 pb-3 border-t border-gray-100 dark:border-gray-800 pt-3 space-y-3">
                       {/* Status stepper */}
                       <div className="relative pt-2">
                         <div className="flex items-center justify-between relative z-10">
                           {STEPS.map((step, i) => {
-                            const isDone = i <= STEPS.indexOf(del.status);
+                            const currentIdx = STEPS.indexOf(del.status);
+                            const isDone = i <= currentIdx;
+                            const isCurrent = i === currentIdx;
+                            const color = STEP_COLORS[step];
                             return (
                               <div key={step} className="flex flex-col items-center gap-2">
                                 <div className={cn(
                                   "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border-4 box-content border-white dark:border-gray-900 transition-colors",
                                   isDone
-                                    ? "bg-emerald-500 text-white"
-                                    : "bg-gray-200 dark:bg-gray-700 text-gray-500"
+                                    ? `${color.done} text-white`
+                                    : "bg-gray-200 dark:bg-gray-700 text-gray-500",
+                                  isCurrent && "ring-2 ring-offset-1 ring-offset-white dark:ring-offset-gray-900 ring-current"
                                 )}>
                                   {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
                                 </div>
@@ -459,16 +492,30 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                         <div className="absolute top-5 left-0 right-0 h-0.5 -translate-y-1/2 flex z-0 px-3">
                           {STEPS.slice(0, -1).map((step, i) => {
                             const isDone = i < STEPS.indexOf(del.status);
+                            const nextStep = STEPS[i + 1];
+                            const color = STEP_COLORS[nextStep];
                             return (
                               <div key={step} className={cn(
                                 "h-full flex-1 transition-colors",
-                                isDone ? "bg-emerald-500" : "bg-gray-200 dark:bg-gray-700"
+                                isDone ? color.line : "bg-gray-200 dark:bg-gray-700"
                               )} />
                             );
                           })}
                         </div>
-                        <div className="flex justify-between text-[9px] text-gray-500 mt-2 px-1">
-                          {STEPS.map((s) => <span key={s} className="w-12 text-center -mx-3 leading-tight">{s.replace(/_/g, " ")}</span>)}
+                        <div className="flex justify-between text-[9px] mt-2 px-1">
+                          {STEPS.map((s, i) => {
+                            const currentIdx = STEPS.indexOf(del.status);
+                            const isDone = i <= currentIdx;
+                            const color = STEP_COLORS[s];
+                            return (
+                              <span key={s} className={cn(
+                                "w-12 text-center -mx-3 leading-tight font-medium",
+                                isDone ? color.text : "text-gray-400"
+                              )}>
+                                {s.replace(/_/g, " ")}
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -478,64 +525,64 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                           <div className="bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-xs font-semibold text-gray-600 dark:text-gray-400 flex items-center gap-1.5">
                             <Package className="w-3.5 h-3.5" /> Pickup Stops
                           </div>
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="bg-gray-50/50 dark:bg-gray-800/30">
-                                <th className="px-3 py-1.5 text-left text-gray-500 font-medium text-xs">#</th>
-                                <th className="px-3 py-1.5 text-left text-gray-500 font-medium text-xs">Location</th>
-                                <th className="px-3 py-1.5 text-right text-gray-500 font-medium text-xs">Weight</th>
-                                <th className="px-3 py-1.5 text-right text-gray-500 font-medium text-xs">Bags</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                              {del.masterRequest.childPickups.map((cp: any) => (
-                                <tr key={cp.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                                  <td className="px-3 py-2 text-gray-500">{cp.stopSequence}</td>
-                                  <td className="px-3 py-2">
-                                    <div className="flex items-center gap-1.5">
-                                      {cp.pickupLocType === "BFH" ? (
-                                        <Home className="w-3.5 h-3.5 text-orange-500 flex-shrink-0" />
-                                      ) : (
-                                        <MapPin className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                                      )}
-                                      <span className="text-gray-900 dark:text-white">
-                                        {cp.pickupLocType === "BFH"
-                                          ? `BFH${cp.center?.centerName ? ` — ${cp.center.centerName}` : ""}`
-                                          : cp.center?.centerName}
-                                      </span>
-                                      {cp.villageName && (
-                                        <span className="text-xs text-gray-400 ml-1">({cp.villageName})</span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">
-                                    {formatWeight(cp.actualWeight || cp.estWeight)}
-                                  </td>
-                                  <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">
-                                    {cp.actualBags || cp.estBags || 0}
-                                  </td>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="bg-gray-50/50 dark:bg-gray-800/30">
+                                  <th className="px-2 py-1.5 text-left text-gray-500 font-medium">#</th>
+                                  <th className="px-2 py-1.5 text-left text-gray-500 font-medium">Location</th>
+                                  <th className="px-2 py-1.5 text-right text-gray-500 font-medium">Weight</th>
+                                  <th className="px-2 py-1.5 text-right text-gray-500 font-medium">Bags</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                {del.masterRequest.childPickups.map((cp: any) => (
+                                  <tr key={cp.id}>
+                                    <td className="px-2 py-1.5 text-gray-500">{cp.stopSequence}</td>
+                                    <td className="px-2 py-1.5">
+                                      <div className="flex items-center gap-1">
+                                        {cp.pickupLocType === "BFH" ? (
+                                          <Home className="w-3 h-3 text-orange-500 shrink-0" />
+                                        ) : (
+                                          <MapPin className="w-3 h-3 text-blue-500 shrink-0" />
+                                        )}
+                                        <span className="text-gray-900 dark:text-white truncate">
+                                          {cp.pickupLocType === "BFH"
+                                            ? `BFH${cp.center?.centerName ? ` — ${cp.center.centerName}` : ""}`
+                                            : cp.center?.centerName}
+                                        </span>
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                      {formatWeight(cp.actualWeight || cp.estWeight)}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right text-gray-700 dark:text-gray-300">
+                                      {cp.actualBags || cp.estBags || 0}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       )}
 
                       {/* Details - Distinct Section Cards */}
-                      <div className="space-y-4">
+                      <div className="space-y-3">
                         
                         {/* Card 1: Logistics Details */}
-                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 sm:p-4 border border-gray-100 dark:border-gray-800">
-                          <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-3">
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 border border-gray-100 dark:border-gray-800">
+                          <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-2">
                             <Truck className="w-3.5 h-3.5 text-blue-500" /> Logistics Details
                           </h4>
-                          <div className="grid grid-cols-2 gap-3 text-sm">
+                          <div className="grid grid-cols-2 gap-2 text-xs">
                             <EditableField id={del.id} fieldKey="driverName" label="Driver" type="text" initialValue={del.driverName} />
                             <EditableField id={del.id} fieldKey="driverContact" label="Driver Contact" type="text" initialValue={del.driverContact} />
                             <EditableField id={del.id} fieldKey="transporterName" label="Transporter" type="text" initialValue={del.transporterName} />
+                            <EditableField id={del.id} fieldKey="invoiceNo" label="Invoice No" type="text" initialValue={del.invoiceNo} />
                             <div>
                               <span className="text-gray-500 text-xs">Total Cargo</span>
-                              <p className="font-medium text-gray-900 dark:text-white mt-1">
+                              <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">
                                 {formatWeight(del.totalWeightFinal)} <span className="text-gray-400">|</span> {del.totalBags || 0} Bags
                               </p>
                             </div>
@@ -543,52 +590,50 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                         </div>
 
                         {/* Card 2: Timeline */}
-                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 sm:p-4 border border-gray-100 dark:border-gray-800">
-                          <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-3">
+                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 border border-gray-100 dark:border-gray-800">
+                          <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-2">
                             <Calendar className="w-3.5 h-3.5 text-orange-500" /> Timeline
                           </h4>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                          <div className="grid grid-cols-3 gap-2 text-xs">
                             <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected" type="date" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().split('T')[0] : ""} />
                             <div>
-                              <span className="text-gray-500 text-xs">Actual Delivery</span>
-                              <p className="font-medium text-gray-900 dark:text-white mt-1">{formatDate(del.actualDeliveryDt) || "—"}</p>
+                              <span className="text-gray-500">Actual</span>
+                              <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">{formatDate(del.actualDeliveryDt) || "—"}</p>
                             </div>
-                            <div className="col-span-2 sm:col-span-1">
-                              <span className="text-gray-500 text-xs">Unloading</span>
-                              <p className="font-medium text-gray-900 dark:text-white mt-1">{formatDate(del.unloadingDt) || "—"}</p>
+                            <div>
+                              <span className="text-gray-500">Unloading</span>
+                              <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">{formatDate(del.unloadingDt) || "—"}</p>
                             </div>
                           </div>
                         </div>
 
                         {/* Card 3: Financial Summary (Receipt Ledger Pattern) */}
                         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
-                          <div className="px-3 sm:px-4 py-3 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                          <div className="px-3 py-2.5 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                             <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
                               <ScrollText className="w-3.5 h-3.5 text-emerald-500" /> Financial Summary
                             </h4>
-                            <div className="w-32 text-right">
+                            <div className="w-28 text-right">
                               <EditableField id={del.id} fieldKey="ratePerTon" label="" initialValue={del.ratePerTon} variant="gray" />
                               <div className="text-[10px] text-gray-400 mt-0.5">Rate / Ton (₹)</div>
                             </div>
                           </div>
                           
-                          <div className="p-3 sm:p-4 space-y-3 text-sm">
+                          <div className="p-3 space-y-2 text-xs">
                             {/* Ideal Payment Row */}
                             <div className="flex justify-between items-center py-1">
-                              <span className="text-gray-500 font-medium">Ideal Payment</span>
-                              <span className="font-semibold text-gray-900 dark:text-white text-base">
+                              <span className="text-gray-500 font-medium text-xs">Ideal Payment</span>
+                              <span className="font-semibold text-gray-900 dark:text-white text-sm">
                                 {formatCurrency(del.idealPayment)}
                               </span>
                             </div>
                             
                             {/* Deductions Ledger */}
-                            <div className="pl-4 border-l-2 border-gray-100 dark:border-gray-800 space-y-3 pt-2">
+                            <div className="pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-2 pt-1">
                               {/* Advance */}
                               <div className="flex justify-between items-center">
-                                <span className="text-gray-500 flex items-center gap-1.5">
-                                  Advance Paid
-                                </span>
-                                <div className="w-32 text-right flex items-center justify-end gap-1.5">
+                                <span className="text-gray-500">Advance Paid</span>
+                                <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.advancePaid ? <span className="text-red-500 font-bold">−</span> : null}
                                   <EditableField id={del.id} fieldKey="advancePaid" label="" initialValue={del.advancePaid} variant="gray" />
                                 </div>
@@ -597,16 +642,16 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                               {/* Misc Amount */}
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-500">Misc Amount</span>
-                                <div className="w-32 text-right flex items-center justify-end gap-1.5">
+                                <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.miscAmount ? <span className="text-red-500 font-bold">−</span> : null}
                                   <EditableField id={del.id} fieldKey="miscAmount" label="" initialValue={del.miscAmount} variant="gray" />
                                 </div>
                               </div>
                               
-                              {/* Waiting Charges (Now strictly negative/deduction) */}
+                              {/* Waiting Charges */}
                               <div className="flex justify-between items-center">
                                 <span className="text-gray-500">Waiting Charges</span>
-                                <div className="w-32 text-right flex items-center justify-end gap-1.5">
+                                <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.waitingCharges ? <span className="text-red-500 font-bold">−</span> : null}
                                   <EditableField id={del.id} fieldKey="waitingCharges" label="" initialValue={del.waitingCharges} variant="gray" />
                                 </div>
@@ -615,25 +660,25 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
 
                             {/* The "Bottom Line" Callout Block - Changes based on completion */}
                             {del.status === "COMPLETED" ? (
-                              <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 space-y-3">
+                              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-gray-600 dark:text-gray-300 font-medium">Balance Amount Paid</span>
-                                  <div className="w-32 text-right">
+                                  <span className="text-gray-600 dark:text-gray-300 font-medium">Balance Paid</span>
+                                  <div className="w-28 text-right">
                                     <EditableField id={del.id} fieldKey="actuallyPaid" label="" initialValue={del.actuallyPaid} variant="gray" />
                                   </div>
                                 </div>
-                                <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-3 sm:p-4 rounded-xl -mx-1">
-                                  <span className="font-bold text-indigo-800 dark:text-indigo-300">Total Payment</span>
-                                  <span className="text-lg sm:text-xl font-bold text-indigo-800 dark:text-indigo-300 text-right">
+                                <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl">
+                                  <span className="font-bold text-indigo-800 dark:text-indigo-300 text-xs">Total Payment</span>
+                                  <span className="text-base font-bold text-indigo-800 dark:text-indigo-300">
                                     {formatCurrency((del.actuallyPaid || 0) + (del.advancePaid || 0) + (del.miscAmount || 0) + (del.waitingCharges || 0))}
                                   </span>
                                 </div>
                               </div>
                             ) : (
-                              <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-800">
-                                <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-3 sm:p-4 rounded-xl -mx-1">
-                                  <span className="font-bold text-emerald-800 dark:text-emerald-300">Est. Balance Due</span>
-                                  <span className="text-lg sm:text-xl font-bold text-emerald-800 dark:text-emerald-300 text-right">
+                              <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                                <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl">
+                                  <span className="font-bold text-emerald-800 dark:text-emerald-300 text-xs">Est. Balance Due</span>
+                                  <span className="text-base font-bold text-emerald-800 dark:text-emerald-300">
                                     {formatCurrency((del.idealPayment || 0) - (del.advancePaid || 0) - (del.miscAmount || 0) - (del.waitingCharges || 0))}
                                   </span>
                                 </div>
@@ -645,14 +690,25 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                       </div>
 
                       {/* Action buttons row */}
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="flex gap-1.5 flex-wrap">
+                        {/* Undo status button */}
+                        {STEPS.indexOf(del.status) > 0 && (
+                          <button
+                            onClick={() => handleStatusUndo(del.id, del.status)}
+                            className="text-[11px] font-medium flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 active:bg-red-100 dark:active:bg-red-900/40 transition-colors"
+                          >
+                            <Undo2 className="w-3 h-3" />
+                            Back to {STEPS[STEPS.indexOf(del.status) - 1]?.replace(/_/g, " ")}
+                          </button>
+                        )}
+
                         {/* Advance status button */}
                         {del.status !== "COMPLETED" && (
                           <button
                             onClick={() => handleStatusAdvance(del.id, del.status, del)}
-                            className="btn-primary text-xs"
+                            className="btn-primary text-[11px] px-2.5 py-1.5"
                           >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <CheckCircle2 className="w-3 h-3" />
                             Advance to {STEPS[STEPS.indexOf(del.status) + 1]?.replace(/_/g, " ")}
                           </button>
                         )}
@@ -661,14 +717,14 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                         <button
                           onClick={() => toggleActivity(del.id)}
                           className={cn(
-                            "text-xs font-medium flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors",
+                            "text-[11px] font-medium flex items-center gap-1 px-2.5 py-1.5 rounded-lg border transition-colors",
                             showActivity === del.id
                               ? "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
-                              : "border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                              : "border-gray-200 dark:border-gray-700 text-gray-500 active:bg-gray-50 dark:active:bg-gray-800/50"
                           )}
                         >
-                          <ScrollText className="w-3.5 h-3.5" />
-                          Activity Logs
+                          <ScrollText className="w-3 h-3" />
+                          Logs
                         </button>
                       </div>
 
@@ -682,20 +738,20 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                             className="overflow-hidden"
                           >
                             <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 mt-2">
-                              <div className="bg-gray-50 dark:bg-gray-800/50 px-3 py-2.5 text-xs font-semibold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 border-b border-gray-100 dark:border-gray-800">
-                                <ScrollText className="w-3.5 h-3.5" /> Delivery Activity Timeline
+                              <div className="bg-gray-50 dark:bg-gray-800/50 px-3 py-2 text-[11px] font-semibold text-gray-600 dark:text-gray-400 flex items-center gap-1.5 border-b border-gray-100 dark:border-gray-800">
+                                <ScrollText className="w-3 h-3" /> Activity Timeline
                               </div>
-                              <div className="p-4 max-h-72 overflow-y-auto w-full">
+                              <div className="p-3 max-h-64 overflow-y-auto w-full">
                                 {(activityLogs[del.id] || []).length === 0 ? (
-                                  <p className="text-xs text-gray-400 text-center py-4">No activity logs</p>
+                                  <p className="text-[11px] text-gray-400 text-center py-3">No activity logs</p>
                                 ) : (
-                                  <div className="space-y-6">
+                                  <div className="space-y-4">
                                     {Object.entries(groupLogsByDate(activityLogs[del.id] || [])).map(([dateLabel, logs]: any) => (
                                       <div key={dateLabel} className="relative">
-                                        <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4 ml-9 relative z-10 bg-white dark:bg-gray-900 inline-block px-1">
+                                        <div className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-3 ml-8 relative z-10 bg-white dark:bg-gray-900 inline-block px-1">
                                           {dateLabel}
                                         </div>
-                                        <div className="space-y-4">
+                                        <div className="space-y-3">
                                           {logs.map((log: any, idx: number) => {
                                             const groupKeys = Object.keys(groupLogsByDate(activityLogs[del.id]));
                                             const isLastDay = dateLabel === groupKeys[groupKeys.length - 1];
@@ -719,30 +775,30 @@ export function DeliveriesClient({ deliveries: initialDeliveries }: DeliveriesCl
                                             }
 
                                             return (
-                                              <div key={log.id} className="relative flex gap-3 pl-2">
+                                              <div key={log.id} className="relative flex gap-2 pl-1">
                                                 {/* Connecting line */}
-                                                {!isLastLog && <div className="absolute top-6 bottom-[-24px] left-[21px] w-[2px] bg-gray-100 dark:bg-gray-800" />}
+                                                {!isLastLog && <div className="absolute top-5 bottom-[-16px] left-[17px] w-[2px] bg-gray-100 dark:bg-gray-800" />}
                                                 
                                                 {/* Node */}
-                                                <div className={`relative z-10 w-7 h-7 flex-shrink-0 rounded-full flex items-center justify-center ring-4 bg-white dark:bg-gray-900 ${ringColor}`}>
+                                                <div className={`relative z-10 w-6 h-6 shrink-0 rounded-full flex items-center justify-center ring-3 bg-white dark:bg-gray-900 ${ringColor}`}>
                                                   <div className={`w-full h-full rounded-full flex items-center justify-center ${bgColor}`}>
-                                                    <Icon className="w-3.5 h-3.5" />
+                                                    <Icon className="w-3 h-3" />
                                                   </div>
                                                 </div>
                                                 
                                                 {/* Content */}
-                                                <div className="flex-1 pb-1">
-                                                  <div className="flex justify-between items-start gap-2">
-                                                    <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed max-w-[85%]">
+                                                <div className="flex-1 pb-1 min-w-0">
+                                                  <div className="flex justify-between items-start gap-1">
+                                                    <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
                                                       <span className="font-semibold text-gray-900 dark:text-white">{log.user?.name}</span> {actionText}.
                                                     </p>
-                                                    <span className="text-[10px] text-gray-400 whitespace-nowrap mt-0.5">
+                                                    <span className="text-[9px] text-gray-400 whitespace-nowrap mt-0.5 shrink-0">
                                                       {new Date(log.createdAt).toLocaleTimeString("en-US", { hour: 'numeric', minute: '2-digit' })}
                                                     </span>
                                                   </div>
                                                   
                                                   {(log.oldValue || log.newValue) && (
-                                                    <div className="mt-2.5 px-3 py-2 rounded-lg bg-gray-50/80 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 overflow-hidden w-full">
+                                                    <div className="mt-1.5 px-2 py-1.5 rounded-lg bg-gray-50/80 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 overflow-hidden w-full">
                                                       <LogDiff oldValue={log.oldValue} newValue={log.newValue} />
                                                     </div>
                                                   )}

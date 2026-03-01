@@ -44,7 +44,7 @@ export function ChatPopup({ masterReqId, onClose }: ChatPopupProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -107,7 +107,7 @@ export function ChatPopup({ masterReqId, onClose }: ChatPopupProps) {
         </div>
 
         {/* Input */}
-        <div className="p-3 border-t border-gray-100 dark:border-gray-800">
+        <div className="p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-gray-100 dark:border-gray-800">
           <div className="flex gap-2">
             <input
               value={newMsg}
