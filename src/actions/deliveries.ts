@@ -108,7 +108,8 @@ export async function createDelivery(data: {
   });
 
   const totalWeight = masterReq?.totalEstWeight || 0;
-  const idealPayment = data.ratePerTon ? data.ratePerTon * totalWeight : null;
+  const totalWeightInTons = totalWeight / 1000;
+  const idealPayment = data.ratePerTon ? data.ratePerTon * totalWeightInTons : null;
 
   const result = await prisma.deliveryDetail.create({
     data: {
@@ -187,7 +188,8 @@ export async function updateDelivery(
   // Auto-calculate ideal payment
   const ratePerTon = data.ratePerTon ?? existing.ratePerTon;
   const totalWeight = data.totalWeightFinal ?? existing.totalWeightFinal;
-  const idealPayment = ratePerTon && totalWeight ? ratePerTon * totalWeight : existing.idealPayment;
+  const totalWeightInTons = totalWeight ? totalWeight / 1000 : 0;
+  const idealPayment = ratePerTon && totalWeight ? ratePerTon * totalWeightInTons : existing.idealPayment;
 
   const updateData: any = { idealPayment };
 
@@ -274,6 +276,60 @@ export async function updateDeliveryStatus(id: string, newStatus: DeliveryStatus
     sendPushToUser(masterReq.cmId, {
       title: "🚛 Delivery Status Update",
       body: `Your ${masterReq.commodity} delivery is now: ${newStatus.replace(/_/g, " ")}`,
+      url: "/deliveries",
+    }).catch(console.error);
+  }
+
+  return updated;
+}
+
+// ─── Undo Delivery Status (go back one step) ────────────
+
+const DELIVERY_STEPS: DeliveryStatus[] = ["SCHEDULED", "LOADING", "IN_TRANSIT", "UNLOADING", "COMPLETED"];
+
+export async function undoDeliveryStatus(id: string) {
+  const session = await auth();
+  if (!session) throw new Error("Unauthorized");
+  const user = session.user as any;
+
+  const existing = await prisma.deliveryDetail.findUnique({ where: { id } });
+  if (!existing) throw new Error("Delivery not found");
+
+  const currentIndex = DELIVERY_STEPS.indexOf(existing.status);
+  if (currentIndex <= 0) throw new Error("Cannot undo: already at the first status");
+
+  const prevStatus = DELIVERY_STEPS[currentIndex - 1];
+  const updateData: any = { status: prevStatus };
+
+  // Clear auto-set dates when rolling back
+  if (existing.status === "COMPLETED") {
+    updateData.actualDeliveryDt = null;
+    updateData.actuallyPaid = null;
+  }
+  if (existing.status === "UNLOADING") {
+    updateData.unloadingDt = null;
+  }
+
+  const updated = await prisma.deliveryDetail.update({
+    where: { id },
+    data: updateData,
+  });
+
+  await logActivity(user.id, "STATUS_CHANGE", "DeliveryDetail", id, {
+    status: existing.status,
+  }, {
+    status: prevStatus,
+  });
+
+  // Notify the CM
+  const masterReq = await prisma.masterRequest.findUnique({
+    where: { id: existing.masterReqId },
+    select: { cmId: true, commodity: true },
+  });
+  if (masterReq) {
+    sendPushToUser(masterReq.cmId, {
+      title: "🚛 Delivery Status Reverted",
+      body: `Your ${masterReq.commodity} delivery was reverted to: ${prevStatus.replace(/_/g, " ")}`,
       url: "/deliveries",
     }).catch(console.error);
   }

@@ -83,7 +83,13 @@ export async function getPickups(filters?: {
         orderBy: { stopSequence: "asc" },
         include: { center: { select: { centerName: true } } },
       },
-      deliveryDetail: { select: { id: true, status: true } },
+      deliveryDetail: {
+        select: {
+          id: true,
+          status: true,
+          factory: { select: { factoryName: true } },
+        },
+      },
       urgentApprovals: {
         where: { status: "PENDING" },
         select: { id: true, changeType: true, createdAt: true },

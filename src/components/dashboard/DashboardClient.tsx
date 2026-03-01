@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Package, Truck, CheckCircle2, Weight, TrendingUp, Clock, Undo } from "lucide-react";
+import { Package, Truck, CheckCircle2, Moon, TrendingUp, Clock, Undo } from "lucide-react";
 import { formatWeight, formatDate, getStatusColor } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { undoActivity } from "@/actions/dashboard";
@@ -12,21 +12,27 @@ const iconMap: Record<string, React.ElementType> = {
   totalRequests: Package,
   inTransit: Truck,
   completedToday: CheckCircle2,
-  pendingWeight: Weight,
+  overToNext: Moon,
 };
 
 const colorMap: Record<string, string> = {
   totalRequests: "from-blue-500 to-blue-600",
   inTransit: "from-cyan-500 to-cyan-600",
   completedToday: "from-emerald-500 to-emerald-600",
-  pendingWeight: "from-amber-500 to-amber-600",
+  overToNext: "from-rose-500 to-pink-600",
 };
 
 const labelMap: Record<string, string> = {
   totalRequests: "Total Requests",
   inTransit: "In Transit",
   completedToday: "Completed Today",
-  pendingWeight: "Pending Weight",
+  overToNext: "Over to Next",
+};
+
+// Navigation targets for clickable cards
+const linkMap: Record<string, string> = {
+  inTransit: "/deliveries?status=IN_TRANSIT",
+  completedToday: "/deliveries?status=COMPLETED",
 };
 
 interface DashboardClientProps {
@@ -34,7 +40,7 @@ interface DashboardClientProps {
     totalRequests: number;
     inTransit: number;
     completedToday: number;
-    pendingWeight: number;
+    overToNext: number;
   };
   statusDistribution: { name: string; value: number }[];
   recentRequests: any[];
@@ -79,29 +85,31 @@ export function DashboardClient({
       <UrgentApprovalBanner approvals={urgentApprovals} />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         {kpiEntries.map(([key, value], index) => {
           const Icon = iconMap[key];
           const color = colorMap[key];
           const label = labelMap[key];
+          const href = linkMap[key];
           return (
             <motion.div
               key={key}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.1 }}
-              className="card p-4 md:p-5"
+              className={`card p-3 ${href ? "cursor-pointer active:scale-[0.98] transition-transform" : ""}`}
+              onClick={() => href && router.push(href)}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className={`p-2.5 rounded-xl bg-gradient-to-br ${color} shadow-lg`}>
-                  {Icon && <Icon className="w-5 h-5 text-white" />}
+              <div className="flex items-start justify-between mb-2">
+                <div className={`p-2 rounded-xl bg-gradient-to-br ${color} shadow-lg`}>
+                  {Icon && <Icon className="w-4 h-4 text-white" />}
                 </div>
-                <TrendingUp className="w-4 h-4 text-emerald-500" />
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
               </div>
-              <p className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
-                {key === "pendingWeight" ? formatWeight(value) : value}
+              <p className="text-xl font-bold text-gray-900 dark:text-white">
+                {value}
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{label}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
             </motion.div>
           );
         })}

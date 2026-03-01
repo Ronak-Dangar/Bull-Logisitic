@@ -90,6 +90,28 @@ function EditableBags({ child }: { child: any }) {
   );
 }
 
+function getPickupPointLabel(stop: any) {
+  if (!stop) return "—";
+  if (stop.pickupLocType === "BFH") {
+    return stop.villageName || stop.center?.centerName || "BFH";
+  }
+  return stop.center?.centerName || "Center";
+}
+
+function getPickupRouteLabel(req: any) {
+  const stops = [...(req.childPickups || [])].sort((a: any, b: any) => (a.stopSequence || 0) - (b.stopSequence || 0));
+  if (stops.length === 0) return req.factory?.factoryName || req.deliveryLocation || "—";
+
+  const fromLabel = getPickupPointLabel(stops[0]);
+  const toLabel = req.deliveryDetail?.factory?.factoryName
+    || req.factory?.factoryName
+    || req.deliveryLocation
+    || getPickupPointLabel(stops[stops.length - 1])
+    || fromLabel;
+
+  return `${fromLabel} → ${toLabel}`;
+}
+
 interface PickupsClientProps {
   pickups: any[];
   centers: any[];
@@ -233,8 +255,8 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      {req.cm?.name}
+                    <span className="font-semibold text-gray-900 dark:text-white truncate max-w-full">
+                      {getPickupRouteLabel(req)}
                     </span>
                     <span className={`badge text-[10px] ${getStatusColor(req.status)}`}>
                       {req.status.replace(/_/g, " ")}

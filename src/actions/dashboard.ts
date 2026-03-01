@@ -7,26 +7,27 @@ export async function getDashboardKPIs() {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
 
-  const [totalRequests, inTransit, completedToday, pendingWeight] = await Promise.all([
+  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+  const [totalRequests, inTransit, completedToday, overToNext] = await Promise.all([
     prisma.masterRequest.count(),
     prisma.deliveryDetail.count({ where: { status: "IN_TRANSIT" } }),
     prisma.deliveryDetail.count({
       where: {
         status: "COMPLETED",
-        updatedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
+        updatedAt: { gte: todayStart },
       },
     }),
-    prisma.masterRequest.aggregate({
-      where: { status: { in: ["SUBMITTED", "FINDING_VEHICLE"] } },
-      _sum: { totalEstWeight: true },
-    }),
+    prisma.masterRequest.count({ where: { status: "OVER_TO_NEXT" } }),
   ]);
 
   return {
     totalRequests,
     inTransit,
     completedToday,
-    pendingWeight: pendingWeight._sum.totalEstWeight || 0,
+    overToNext,
   };
 }
 
