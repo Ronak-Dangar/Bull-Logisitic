@@ -64,8 +64,9 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
         })),
       });
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || "An error occurred while saving the request");
     } finally {
       setLoading(false);
     }

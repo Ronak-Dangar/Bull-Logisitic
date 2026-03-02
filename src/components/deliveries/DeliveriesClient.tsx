@@ -42,7 +42,7 @@ function groupLogsByDate(logs: any[]) {
   return groups;
 }
 
-function EditableField({ id, label, initialValue, fieldKey, type = "number", validate, variant = "ghost" }: any) {
+function EditableField({ id, label, initialValue, fieldKey, type = "number", validate, variant = "ghost", isReadonly = false }: any) {
   const router = useRouter();
   const [val, setVal] = useState(initialValue || "");
   const [loading, setLoading] = useState(false);
@@ -93,7 +93,7 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onBlur={handleBlur}
-        disabled={loading}
+        disabled={loading || isReadonly}
         className={cn(
           "w-full mt-1 px-2 py-1 border rounded text-sm font-medium transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:opacity-50",
           variant === "gray" 
@@ -211,6 +211,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
 interface DeliveriesClientProps {
   deliveries: any[];
   initialFilter?: string;
+  isCM?: boolean;
 }
 
 // ─── Invoice Prompt Popup ────────────────────────────────
@@ -254,7 +255,7 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
   );
 }
 
-export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter }: DeliveriesClientProps) {
+export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter, isCM = false }: DeliveriesClientProps) {
   const router = useRouter();
   const [deliveries, setDeliveries] = useState(initialDeliveries);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -576,10 +577,10 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                             <Truck className="w-3.5 h-3.5 text-blue-500" /> Logistics Details
                           </h4>
                           <div className="grid grid-cols-2 gap-2 text-xs">
-                            <EditableField id={del.id} fieldKey="driverName" label="Driver" type="text" initialValue={del.driverName} />
-                            <EditableField id={del.id} fieldKey="driverContact" label="Driver Contact" type="text" initialValue={del.driverContact} />
-                            <EditableField id={del.id} fieldKey="transporterName" label="Transporter" type="text" initialValue={del.transporterName} />
-                            <EditableField id={del.id} fieldKey="invoiceNo" label="Invoice No" type="text" initialValue={del.invoiceNo} />
+                            <EditableField id={del.id} fieldKey="driverName" label="Driver" type="text" initialValue={del.driverName} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="driverContact" label="Driver Contact" type="text" initialValue={del.driverContact} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="transporterName" label="Transporter" type="text" initialValue={del.transporterName} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="invoiceNo" label="Invoice No" type="text" initialValue={del.invoiceNo} isReadonly={isCM} />
                             <div>
                               <span className="text-gray-500 text-xs">Total Cargo</span>
                               <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">
@@ -595,7 +596,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                             <Calendar className="w-3.5 h-3.5 text-orange-500" /> Timeline
                           </h4>
                           <div className="grid grid-cols-3 gap-2 text-xs">
-                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected" type="date" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().split('T')[0] : ""} />
+                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected" type="date" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().split('T')[0] : ""} isReadonly={isCM} />
                             <div>
                               <span className="text-gray-500">Actual</span>
                               <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">{formatDate(del.actualDeliveryDt) || "—"}</p>
@@ -608,6 +609,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                         </div>
 
                         {/* Card 3: Financial Summary (Receipt Ledger Pattern) */}
+                        {!isCM && (
                         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
                           <div className="px-3 py-2.5 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                             <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
@@ -687,12 +689,13 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
 
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {/* Action buttons row */}
                       <div className="flex gap-1.5 flex-wrap">
                         {/* Undo status button */}
-                        {STEPS.indexOf(del.status) > 0 && (
+                        {!isCM && STEPS.indexOf(del.status) > 0 && (
                           <button
                             onClick={() => handleStatusUndo(del.id, del.status)}
                             className="text-[11px] font-medium flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 active:bg-red-100 dark:active:bg-red-900/40 transition-colors"
@@ -703,7 +706,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                         )}
 
                         {/* Advance status button */}
-                        {del.status !== "COMPLETED" && (
+                        {!isCM && del.status !== "COMPLETED" && (
                           <button
                             onClick={() => handleStatusAdvance(del.id, del.status, del)}
                             className="btn-primary text-[11px] px-2.5 py-1.5"

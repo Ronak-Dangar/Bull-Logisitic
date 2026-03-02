@@ -11,8 +11,13 @@ import { sendPushToUser } from "@/lib/webpush";
 export async function getDeliveries(filters?: { status?: string }) {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
+  const user = session.user as any;
 
   const where: any = {};
+  if (user.role === "CM") {
+    where.masterRequest = { cmId: user.id };
+  }
+  
   if (filters?.status && filters.status !== "ALL") {
     where.status = filters.status;
   }
@@ -91,7 +96,6 @@ export async function createDelivery(data: {
   ratePerTon?: number;
   advancePaid?: number;
   miscAmount?: number;
-  totalBags?: number;
   invoiceNo?: string;
 }) {
   const session = await auth();
@@ -127,7 +131,7 @@ export async function createDelivery(data: {
       idealPayment,
       advancePaid: data.advancePaid || null,
       miscAmount: data.miscAmount || null,
-      totalBags: data.totalBags || null,
+      totalBags: masterReq?.totalEstBags || null,
       invoiceNo: data.invoiceNo || null,
       createdById: user.id,
     },

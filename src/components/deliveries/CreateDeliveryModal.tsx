@@ -28,7 +28,6 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
     ratePerTon: "",
     advancePaid: "",
     miscAmount: "",
-    totalBags: "",
     invoiceNo: "",
   });
 
@@ -61,12 +60,12 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
         ratePerTon: form.ratePerTon ? Number(form.ratePerTon) : undefined,
         advancePaid: form.advancePaid ? Number(form.advancePaid) : undefined,
         miscAmount: form.miscAmount ? Number(form.miscAmount) : undefined,
-        totalBags: form.totalBags ? Number(form.totalBags) : undefined,
         invoiceNo: form.invoiceNo || undefined,
       });
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -154,11 +153,6 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Delivery</label>
                 <input type="date" value={form.expDeliveryDt} onChange={(e) => update("expDeliveryDt", e.target.value)} className="input w-full" />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Total Bags</label>
-                <input type="number" value={form.totalBags} onChange={(e) => update("totalBags", e.target.value)} className="input w-full" />
               </div>
 
               <div>

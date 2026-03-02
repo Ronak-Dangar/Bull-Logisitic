@@ -279,6 +279,17 @@ export async function updateChildPickup(
         where: { id: existing.parentId },
         data: { totalEstWeight: finalWeight, totalEstBags: finalBags },
       });
+
+      // Update Delivery financials if they exist
+      const delivery = await prisma.deliveryDetail.findUnique({ where: { masterReqId: existing.parentId } });
+      if (delivery) {
+        const totalWeightInTons = finalWeight ? finalWeight / 1000 : 0;
+        const idealPayment = delivery.ratePerTon ? delivery.ratePerTon * totalWeightInTons : delivery.idealPayment;
+        await prisma.deliveryDetail.update({
+          where: { id: delivery.id },
+          data: { totalWeightFinal: finalWeight, totalBags: finalBags, idealPayment },
+        });
+      }
     }
   }
 
