@@ -25,6 +25,7 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
     transporterName: "",
     transpContact: "",
     expDeliveryDt: "",
+    scheduledPickupTime: "",
     ratePerTon: "",
     advancePaid: "",
     miscAmount: "",
@@ -57,6 +58,7 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
         transporterName: form.transporterName || undefined,
         transpContact: form.transpContact || undefined,
         expDeliveryDt: form.expDeliveryDt || undefined,
+        scheduledPickupTime: form.scheduledPickupTime || undefined,
         ratePerTon: form.ratePerTon ? Number(form.ratePerTon) : undefined,
         advancePaid: form.advancePaid ? Number(form.advancePaid) : undefined,
         miscAmount: form.miscAmount ? Number(form.miscAmount) : undefined,
@@ -150,6 +152,11 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
             <div className="bg-white dark:bg-gray-800 p-4 sm:p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-4">
               <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2">Cargo & Documentation</h3>
               
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Scheduled Pickup Time</label>
+                <input type="datetime-local" value={form.scheduledPickupTime} onChange={(e) => update("scheduledPickupTime", e.target.value)} className="input w-full" />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Delivery</label>
                 <input type="date" value={form.expDeliveryDt} onChange={(e) => update("expDeliveryDt", e.target.value)} className="input w-full" />

@@ -62,6 +62,9 @@ export async function getRecentRequests(limit = 5) {
   if (!session) throw new Error("Unauthorized");
 
   return prisma.masterRequest.findMany({
+    where: {
+      status: { not: "PROCESSED" },
+    },
     orderBy: { createdAt: "desc" },
     take: limit,
     include: {

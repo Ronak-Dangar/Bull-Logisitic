@@ -6,7 +6,7 @@ import {
   Plus, Search, ChevronDown, MapPin, User2, Weight,
   Calendar, Package, Truck, CheckCircle, MessageSquare, Home, StickyNote, ScrollText, ChevronRight, AlertTriangle, Trash2
 } from "lucide-react";
-import { formatWeight, formatDate, getStatusColor, cn } from "@/lib/utils";
+import { formatWeight, formatDate, getStatusColor, cn, timeSince } from "@/lib/utils";
 import { CreatePickupModal } from "./CreatePickupModal";
 import { CreateDeliveryModal } from "../deliveries/CreateDeliveryModal";
 import { AddStopModal } from "./AddStopModal";
@@ -152,7 +152,7 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
   // Sync from server when props change (e.g. after creation)
   useEffect(() => { setPickups(initialPickups); }, [initialPickups]);
 
-  const statuses = ["ALL", "SUBMITTED", "FINDING_VEHICLE", "PROCESSED", "OVER_TO_NEXT", "REJECTED"];
+  const statuses = ["ALL", "SUBMITTED", "FINDING_VEHICLE", "UNABLE_TO_FIND", "PROCESSED", "OVER_TO_NEXT", "REJECTED"];
 
   const filtered = pickups.filter((p: any) => {
     if (statusFilter !== "ALL" && p.status !== statusFilter) return false;
@@ -261,6 +261,11 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
                     <span className={`badge text-[10px] ${getStatusColor(req.status)}`}>
                       {req.status.replace(/_/g, " ")}
                     </span>
+                    {(req.status === "FINDING_VEHICLE" || req.status === "UNABLE_TO_FIND") && (
+                      <span className="text-[10px] text-gray-500 dark:text-gray-400 ml-1">
+                        since {timeSince(req.updatedAt)}
+                      </span>
+                    )}
                     {/* Urgent approval badge */}
                     {(req.urgentApprovals?.length > 0) && (
                       <span className="flex items-center gap-1 badge bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 border-orange-300 dark:border-orange-700 text-[10px] animate-pulse">
@@ -322,6 +327,14 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
                         </div>
                       )}
 
+                      {/* CM Specific Alerts */}
+                      {isCM && req.status === "UNABLE_TO_FIND" && (
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-sm text-red-800 dark:text-red-300 border border-red-200 dark:border-red-800">
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                          <span>We are unable to find a vehicle. If you want, you can try finding one too! Keep us updated via chat.</span>
+                        </div>
+                      )}
+
                       {/* Status actions — LM/Admin only */}
                       <div className="flex gap-2 flex-wrap">
                         {!isCM && req.status === "SUBMITTED" && (
@@ -335,7 +348,20 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
                           </button>
                         )}
                         {!isCM && req.status === "FINDING_VEHICLE" && (
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
+                            <button onClick={() => setShowDelivery(req.id)} className="btn-primary text-xs">
+                              <CheckCircle className="w-3.5 h-3.5" /> Create Delivery & Process
+                            </button>
+                            <button onClick={() => handleStatusChange(req.id, "UNABLE_TO_FIND")} className="btn-secondary text-xs text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 border-red-200 dark:border-red-900/30 hover:bg-red-50 dark:hover:bg-red-900/20">
+                              <AlertTriangle className="w-3.5 h-3.5" /> Unable to find
+                            </button>
+                            <button onClick={() => handleStatusChange(req.id, "OVER_TO_NEXT")} className="btn-secondary text-xs">
+                              <Calendar className="w-3.5 h-3.5" /> Over to Next Day
+                            </button>
+                          </div>
+                        )}
+                        {!isCM && req.status === "UNABLE_TO_FIND" && (
+                          <div className="flex gap-2 flex-wrap">
                             <button onClick={() => setShowDelivery(req.id)} className="btn-primary text-xs">
                               <CheckCircle className="w-3.5 h-3.5" /> Create Delivery & Process
                             </button>

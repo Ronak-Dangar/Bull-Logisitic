@@ -6,22 +6,23 @@ import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
   Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2
 } from "lucide-react";
-import { formatWeight, formatDate, formatCurrency, getStatusColor, cn } from "@/lib/utils";
+import { formatWeight, formatDate, formatCurrency, getStatusColor, cn, formatDateTime } from "@/lib/utils";
 import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus } from "@/actions/deliveries";
 import { getEntityActivityLogs } from "@/actions/admin";
 import { useRouter } from "next/navigation";
 import { ChatPopup } from "../shared/ChatPopup";
 import { LogDiff } from "../shared/LogDiff";
 
-const STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "UNLOADING", "COMPLETED"];
+const STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "AT_FACTORY", "COMPLETED", "RECEIPT_SUBMITTED"];
 
 // Color map for each status step
 const STEP_COLORS: Record<string, { done: string; text: string; line: string }> = {
   SCHEDULED:  { done: "bg-blue-500",    text: "text-blue-500",    line: "bg-blue-500" },
   LOADING:    { done: "bg-amber-500",   text: "text-amber-500",   line: "bg-amber-500" },
   IN_TRANSIT: { done: "bg-violet-500",  text: "text-violet-500",  line: "bg-violet-500" },
-  UNLOADING:  { done: "bg-orange-500",  text: "text-orange-500",  line: "bg-orange-500" },
+  AT_FACTORY: { done: "bg-orange-500",  text: "text-orange-500",  line: "bg-orange-500" },
   COMPLETED:  { done: "bg-emerald-500", text: "text-emerald-500", line: "bg-emerald-500" },
+  RECEIPT_SUBMITTED: { done: "bg-teal-500", text: "text-teal-500", line: "bg-teal-500" },
 };
 
 function groupLogsByDate(logs: any[]) {
@@ -47,6 +48,10 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
   const [val, setVal] = useState(initialValue || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVal(initialValue || "");
+  }, [initialValue]);
 
   // Allow consumer to pass a global callback to update parent state after API call
   // This is a quick fix; a robust solution would use a React context or lift state up completely.
@@ -208,6 +213,63 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
   );
 }
 
+// ─── Receipt Prompt Popup ────────────────────────────────
+function ReceiptPromptPopup({ delivery, onClose, onConfirm }: { delivery: any; onClose: () => void; onConfirm: (receiptUrl: string) => void }) {
+  const [receiptUrl, setReceiptUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    await onConfirm(receiptUrl);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center p-0 sm:items-center sm:p-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative w-full max-w-md card p-4 z-10 space-y-4 rounded-b-none sm:rounded-b-2xl"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+            <FileText className="w-4 h-4 text-teal-500" /> Upload Receipt
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+        
+        <p className="text-xs text-gray-500">Provide a link or base64 representation of the submitted receipt to complete the workflow.</p>
+        
+        <div>
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Receipt Image URL</label>
+          <input
+            type="text"
+            value={receiptUrl}
+            onChange={(e) => setReceiptUrl(e.target.value)}
+            className="input w-full text-sm"
+            placeholder="https://..."
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={onClose} className="btn-secondary flex-1 text-sm bg-gray-100 dark:bg-gray-800 border-transparent">Skip</button>
+          <button onClick={handleConfirm} disabled={loading || !receiptUrl.trim()} className="btn-primary flex-1 text-sm !bg-teal-600 hover:!bg-teal-700 border-teal-600">
+            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Submit Receipt"}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 interface DeliveriesClientProps {
   deliveries: any[];
   initialFilter?: string;
@@ -227,7 +289,7 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-sm card p-4 z-10 space-y-3 rounded-b-none sm:rounded-b-2xl">
         <div className="flex items-center justify-between">
@@ -262,6 +324,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
   const [statusFilter, setStatusFilter] = useState(initialFilter || "ALL");
   const [completingDelivery, setCompletingDelivery] = useState<any>(null);
   const [invoicePromptDelivery, setInvoicePromptDelivery] = useState<any>(null);
+  const [receiptPromptDelivery, setReceiptPromptDelivery] = useState<any>(null);
   const [chatReqId, setChatReqId] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<Record<string, any[]>>({});
   const [showActivity, setShowActivity] = useState<string | null>(null);
@@ -307,6 +370,10 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
         setCompletingDelivery(delivery);
         return;
       }
+      if (nextStatus === "RECEIPT_SUBMITTED") {
+        setReceiptPromptDelivery(delivery);
+        return;
+      }
       if (nextStatus === "IN_TRANSIT" && !delivery.invoiceNo) {
         setInvoicePromptDelivery(delivery);
         return;
@@ -349,6 +416,17 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
     await updateDeliveryStatus(completingDelivery.id, "COMPLETED" as any);
     await refreshActivityLogs(completingDelivery.id);
     setCompletingDelivery(null);
+    router.refresh();
+  };
+
+  const handleReceiptConfirm = async (receiptUrl: string) => {
+    if (!receiptPromptDelivery) return;
+    // Optimistic update
+    setDeliveries((prev) => prev.map((d: any) => d.id === receiptPromptDelivery.id ? { ...d, status: "RECEIPT_SUBMITTED", receiptUrl } : d));
+    await updateDelivery(receiptPromptDelivery.id, { receiptUrl });
+    await updateDeliveryStatus(receiptPromptDelivery.id, "RECEIPT_SUBMITTED" as any);
+    await refreshActivityLogs(receiptPromptDelivery.id);
+    setReceiptPromptDelivery(null);
     router.refresh();
   };
 
@@ -595,16 +673,11 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                           <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-2">
                             <Calendar className="w-3.5 h-3.5 text-orange-500" /> Timeline
                           </h4>
-                          <div className="grid grid-cols-3 gap-2 text-xs">
-                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected" type="date" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().split('T')[0] : ""} isReadonly={isCM} />
-                            <div>
-                              <span className="text-gray-500">Actual</span>
-                              <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">{formatDate(del.actualDeliveryDt) || "—"}</p>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Unloading</span>
-                              <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">{formatDate(del.unloadingDt) || "—"}</p>
-                            </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <EditableField id={del.id} fieldKey="scheduledPickupTime" label="Scheduled Pickup" type="datetime-local" initialValue={del.scheduledPickupTime ? new Date(del.scheduledPickupTime).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected Delivery" type="date" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().split('T')[0] : ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="actualDeliveryDt" label="Actual Delivery" type="datetime-local" initialValue={del.actualDeliveryDt ? new Date(del.actualDeliveryDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="unloadingDt" label="Factory Reached" type="datetime-local" initialValue={del.unloadingDt ? new Date(del.unloadingDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
                           </div>
                         </div>
 
@@ -706,13 +779,13 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                         )}
 
                         {/* Advance status button */}
-                        {!isCM && del.status !== "COMPLETED" && (
+                        {!isCM && del.status !== "RECEIPT_SUBMITTED" && (
                           <button
                             onClick={() => handleStatusAdvance(del.id, del.status, del)}
                             className="btn-primary text-[11px] px-2.5 py-1.5"
                           >
                             <CheckCircle2 className="w-3 h-3" />
-                            Advance to {STEPS[STEPS.indexOf(del.status) + 1]?.replace(/_/g, " ")}
+                            {del.status === "COMPLETED" ? "Upload Receipt" : `Advance to ${STEPS[STEPS.indexOf(del.status) + 1]?.replace(/_/g, " ")}`}
                           </button>
                         )}
 
@@ -850,6 +923,15 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
           delivery={invoicePromptDelivery}
           onClose={() => setInvoicePromptDelivery(null)}
           onConfirm={handleInvoiceConfirm}
+        />
+      )}
+
+      {/* Receipt Prompt Popup */}
+      {receiptPromptDelivery && (
+        <ReceiptPromptPopup
+          delivery={receiptPromptDelivery}
+          onClose={() => setReceiptPromptDelivery(null)}
+          onConfirm={handleReceiptConfirm}
         />
       )}
 

@@ -27,7 +27,7 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", roles: ["ADMIN", "LM"] },
   { label: "Pickups", href: "/pickups", icon: "Package", roles: ["ADMIN", "LM", "CM"] },
-  { label: "Deliveries", href: "/deliveries", icon: "Truck", roles: ["ADMIN", "LM"] },
+  { label: "Deliveries", href: "/deliveries", icon: "Truck", roles: ["ADMIN", "LM", "CM"] },
   { label: "Users", href: "/admin/users", icon: "Users", roles: ["ADMIN"] },
   { label: "Centers", href: "/admin/centers", icon: "Building2", roles: ["ADMIN"] },
   { label: "Factories", href: "/admin/factories", icon: "Factory", roles: ["ADMIN"] },
