@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Search, ChevronDown, MapPin, User2, Weight,
@@ -117,9 +117,11 @@ interface PickupsClientProps {
   centers: any[];
   factories: any[];
   urgentApprovals?: any[];
+  initialStatusFilter?: string;
+  highlightId?: string;
 }
 
-export function PickupsClient({ pickups: initialPickups, centers, factories, urgentApprovals = [] }: PickupsClientProps) {
+export function PickupsClient({ pickups: initialPickups, centers, factories, urgentApprovals = [], initialStatusFilter = "ALL", highlightId }: PickupsClientProps) {
   const router = useRouter();
   const { data: session } = useSession();
   const isCM = (session?.user as any)?.role === "CM";
@@ -129,15 +131,33 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
   const [showCreate, setShowCreate] = useState(false);
   const [showDelivery, setShowDelivery] = useState<string | null>(null);
   const [addingStopTo, setAddingStopTo] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
   const [search, setSearch] = useState("");
   const [chatReqId, setChatReqId] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<Record<string, any[]>>({});
   const [showActivity, setShowActivity] = useState<string | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(highlightId || null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // Urgent approval popup: show one at a time for LMs
   const [approvalQueue, setApprovalQueue] = useState<any[]>(urgentApprovals);
   const [dismissedApprovals, setDismissedApprovals] = useState<Set<string>>(new Set());
+
+  // Highlight + scroll to card from dashboard
+  useEffect(() => {
+    if (!highlightId) return;
+    // Small delay to let cards render
+    const timeout = setTimeout(() => {
+      const el = cardRefs.current[highlightId];
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      // Clear highlight after animation completes
+      const clearTimeout_ = setTimeout(() => setHighlightedId(null), 3000);
+      return () => clearTimeout(clearTimeout_);
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [highlightId]);
 
   const activeApproval = approvalQueue.find((a) => !dismissedApprovals.has(a.id)) ?? null;
 
@@ -240,10 +260,14 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
           {filtered.map((req: any, index: number) => (
             <motion.div
               key={req.id}
+              ref={(el) => { cardRefs.current[req.id] = el; }}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, delay: index * 0.05 }}
-              className="card-hover overflow-hidden"
+              className={cn(
+                "card-hover overflow-hidden",
+                highlightedId === req.id && "ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-gray-900 animate-pulse"
+              )}
             >
               {/* Header row - click anywhere to expand, but it's a div now to avoid nested buttons */}
               <div

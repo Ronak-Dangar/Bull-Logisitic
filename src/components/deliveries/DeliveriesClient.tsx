@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
-  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2
+  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Phone
 } from "lucide-react";
 import { formatWeight, formatDate, formatCurrency, getStatusColor, cn, formatDateTime } from "@/lib/utils";
 import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus } from "@/actions/deliveries";
@@ -14,6 +14,15 @@ import { ChatPopup } from "../shared/ChatPopup";
 import { LogDiff } from "../shared/LogDiff";
 
 const STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "AT_FACTORY", "COMPLETED", "RECEIPT_SUBMITTED"];
+
+// Display label overrides for statuses
+const STEP_DISPLAY_NAMES: Record<string, string> = {
+  COMPLETED: "OFF LOADED",
+};
+
+function getStepDisplayName(step: string): string {
+  return STEP_DISPLAY_NAMES[step] || step.replace(/_/g, " ");
+}
 
 // Color map for each status step
 const STEP_COLORS: Record<string, { done: string; text: string; line: string }> = {
@@ -43,7 +52,7 @@ function groupLogsByDate(logs: any[]) {
   return groups;
 }
 
-function EditableField({ id, label, initialValue, fieldKey, type = "number", validate, variant = "ghost", isReadonly = false }: any) {
+function EditableField({ id, label, initialValue, fieldKey, type = "number", validate, variant = "ghost", isReadonly = false, onBeforeChange }: any) {
   const router = useRouter();
   const [val, setVal] = useState(initialValue || "");
   const [loading, setLoading] = useState(false);
@@ -61,6 +70,12 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
     if (type === "number" && val === "") finalVal = 0; // handle empty numeric clearing
     if (type === "number" && isNaN(finalVal as number)) return;
     if (finalVal === initialValue) return;
+
+    // Optional confirmation gate (used for financial fields after payment)
+    if (onBeforeChange && !onBeforeChange()) {
+      setVal(initialValue || "");
+      return;
+    }
 
     if (validate) {
       const errMsg = validate(finalVal);
@@ -108,6 +123,47 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
       />
       {type === "date" && <span className="text-[10px] text-gray-400 absolute bottom-1 right-2 pointer-events-none pb-1">{val ? "" : "Select Date"}</span>}
       {error && <span className="text-[10px] text-red-500 mt-1 block">{error}</span>}
+    </div>
+  );
+}
+
+// ─── Phone Field with Dial/Copy Button ───────────────────
+function PhoneField({ id, fieldKey, label, initialValue, isReadonly = false, onBeforeChange }: any) {
+  const [copied, setCopied] = useState(false);
+
+  const handleDial = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const phone = initialValue?.toString().trim();
+    if (!phone) return;
+
+    // Check if mobile device
+    const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = `tel:${phone}`;
+    } else {
+      navigator.clipboard.writeText(phone).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  };
+
+  return (
+    <div className="relative">
+      <EditableField id={id} fieldKey={fieldKey} label={label} type="text" initialValue={initialValue} isReadonly={isReadonly} onBeforeChange={onBeforeChange} />
+      {initialValue && (
+        <button
+          onClick={handleDial}
+          className="absolute right-1 bottom-1 p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 transition-colors"
+          title={copied ? "Copied!" : "Call / Copy number"}
+        >
+          {copied ? (
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          ) : (
+            <Phone className="w-3.5 h-3.5" />
+          )}
+        </button>
+      )}
     </div>
   );
 }
@@ -455,7 +511,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                 : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
             )}
           >
-            {s === "ALL" ? "All" : s.replace(/_/g, " ")}
+            {s === "ALL" ? "All" : getStepDisplayName(s)}
           </button>
         ))}
       </div>
@@ -493,7 +549,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                       />
                     </div>
                     <span className={`badge text-[10px] shrink-0 ${getStatusColor(del.status)}`}>
-                      {del.status.replace(/_/g, " ")}
+                      {getStepDisplayName(del.status)}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
@@ -591,7 +647,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                 "w-12 text-center -mx-3 leading-tight font-medium",
                                 isDone ? color.text : "text-gray-400"
                               )}>
-                                {s.replace(/_/g, " ")}
+                                {getStepDisplayName(s)}
                               </span>
                             );
                           })}
@@ -656,7 +712,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                           </h4>
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             <EditableField id={del.id} fieldKey="driverName" label="Driver" type="text" initialValue={del.driverName} isReadonly={isCM} />
-                            <EditableField id={del.id} fieldKey="driverContact" label="Driver Contact" type="text" initialValue={del.driverContact} isReadonly={isCM} />
+                            <PhoneField id={del.id} fieldKey="driverContact" label="Driver Contact" initialValue={del.driverContact} isReadonly={isCM} />
                             <EditableField id={del.id} fieldKey="transporterName" label="Transporter" type="text" initialValue={del.transporterName} isReadonly={isCM} />
                             <EditableField id={del.id} fieldKey="invoiceNo" label="Invoice No" type="text" initialValue={del.invoiceNo} isReadonly={isCM} />
                             <div>
@@ -689,7 +745,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                               <ScrollText className="w-3.5 h-3.5 text-emerald-500" /> Financial Summary
                             </h4>
                             <div className="w-28 text-right">
-                              <EditableField id={del.id} fieldKey="ratePerTon" label="" initialValue={del.ratePerTon} variant="gray" />
+                              <EditableField id={del.id} fieldKey="ratePerTon" label="" initialValue={del.ratePerTon} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                               <div className="text-[10px] text-gray-400 mt-0.5">Rate / Ton (₹)</div>
                             </div>
                           </div>
@@ -710,7 +766,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                 <span className="text-gray-500">Advance Paid</span>
                                 <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.advancePaid ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="advancePaid" label="" initialValue={del.advancePaid} variant="gray" />
+                                  <EditableField id={del.id} fieldKey="advancePaid" label="" initialValue={del.advancePaid} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                 </div>
                               </div>
                               
@@ -719,7 +775,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                 <span className="text-gray-500">Misc Amount</span>
                                 <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.miscAmount ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="miscAmount" label="" initialValue={del.miscAmount} variant="gray" />
+                                  <EditableField id={del.id} fieldKey="miscAmount" label="" initialValue={del.miscAmount} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                 </div>
                               </div>
                               
@@ -728,18 +784,18 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                 <span className="text-gray-500">Waiting Charges</span>
                                 <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.waitingCharges ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="waitingCharges" label="" initialValue={del.waitingCharges} variant="gray" />
+                                  <EditableField id={del.id} fieldKey="waitingCharges" label="" initialValue={del.waitingCharges} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                 </div>
                               </div>
                             </div>
 
                             {/* The "Bottom Line" Callout Block - Changes based on completion */}
-                            {del.status === "COMPLETED" ? (
+                            {(del.status === "COMPLETED" || del.status === "RECEIPT_SUBMITTED") ? (
                               <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
                                 <div className="flex justify-between items-center">
                                   <span className="text-gray-600 dark:text-gray-300 font-medium">Balance Paid</span>
                                   <div className="w-28 text-right">
-                                    <EditableField id={del.id} fieldKey="actuallyPaid" label="" initialValue={del.actuallyPaid} variant="gray" />
+                                    <EditableField id={del.id} fieldKey="actuallyPaid" label="" initialValue={del.actuallyPaid} variant="gray" onBeforeChange={del.actuallyPaid ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                   </div>
                                 </div>
                                 <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl">
@@ -748,6 +804,13 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                     {formatCurrency((del.actuallyPaid || 0) + (del.advancePaid || 0) + (del.miscAmount || 0) + (del.waitingCharges || 0))}
                                   </span>
                                 </div>
+                                {/* Payment Completed Banner */}
+                                {del.actuallyPaid != null && del.actuallyPaid > 0 && (
+                                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Payment Completed</span>
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-800">
@@ -774,7 +837,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                             className="text-[11px] font-medium flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 active:bg-red-100 dark:active:bg-red-900/40 transition-colors"
                           >
                             <Undo2 className="w-3 h-3" />
-                            Back to {STEPS[STEPS.indexOf(del.status) - 1]?.replace(/_/g, " ")}
+                            Back to {getStepDisplayName(STEPS[STEPS.indexOf(del.status) - 1] || "")}
                           </button>
                         )}
 
@@ -785,7 +848,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                             className="btn-primary text-[11px] px-2.5 py-1.5"
                           >
                             <CheckCircle2 className="w-3 h-3" />
-                            {del.status === "COMPLETED" ? "Upload Receipt" : `Advance to ${STEPS[STEPS.indexOf(del.status) + 1]?.replace(/_/g, " ")}`}
+                            {del.status === "COMPLETED" ? "Upload Receipt" : `Advance to ${getStepDisplayName(STEPS[STEPS.indexOf(del.status) + 1] || "")}`}
                           </button>
                         )}
 

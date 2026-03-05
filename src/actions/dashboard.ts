@@ -7,17 +7,13 @@ export async function getDashboardKPIs() {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
 
-  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
-  const tomorrowStart = new Date(todayStart);
-  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
-  const [totalRequests, inTransit, completedToday, overToNext] = await Promise.all([
+  const [totalRequests, inTransit, incompleteDeliveries, overToNext] = await Promise.all([
     prisma.masterRequest.count(),
     prisma.deliveryDetail.count({ where: { status: "IN_TRANSIT" } }),
     prisma.deliveryDetail.count({
       where: {
-        status: "COMPLETED",
-        updatedAt: { gte: todayStart },
+        status: { not: "RECEIPT_SUBMITTED" },
       },
     }),
     prisma.masterRequest.count({ where: { status: "OVER_TO_NEXT" } }),
@@ -26,7 +22,7 @@ export async function getDashboardKPIs() {
   return {
     totalRequests,
     inTransit,
-    completedToday,
+    incompleteDeliveries,
     overToNext,
   };
 }

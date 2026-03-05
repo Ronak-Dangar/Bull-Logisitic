@@ -69,6 +69,8 @@ export function getStatusColor(status: string): string {
     IN_TRANSIT: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
     UNLOADING: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30",
     COMPLETED: "bg-green-500/20 text-green-400 border-green-500/30",
+    RECEIPT_SUBMITTED: "bg-teal-500/20 text-teal-400 border-teal-500/30",
+    AT_FACTORY: "bg-orange-500/20 text-orange-400 border-orange-500/30",
     PENDING: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
     LOADED: "bg-green-500/20 text-green-400 border-green-500/30",
   };
