@@ -159,6 +159,7 @@ export async function createMasterRequest(data: {
       cmId: user.id,
       commodity: data.commodity,
       totalEstWeight,
+      totalEstBags,
       factoryId: data.factoryId || null,
       deliveryLocation: factory?.factoryName || "",
       pickupDate: new Date(data.pickupDate),
@@ -279,6 +280,17 @@ export async function updateChildPickup(
         where: { id: existing.parentId },
         data: { totalEstWeight: finalWeight, totalEstBags: finalBags },
       });
+
+      // Update Delivery financials if they exist
+      const delivery = await prisma.deliveryDetail.findUnique({ where: { masterReqId: existing.parentId } });
+      if (delivery) {
+        const totalWeightInTons = finalWeight ? finalWeight / 1000 : 0;
+        const idealPayment = delivery.ratePerTon ? delivery.ratePerTon * totalWeightInTons : delivery.idealPayment;
+        await prisma.deliveryDetail.update({
+          where: { id: delivery.id },
+          data: { totalWeightFinal: finalWeight, totalBags: finalBags, idealPayment },
+        });
+      }
     }
   }
 
@@ -341,9 +353,17 @@ export async function updateRequestStatus(requestId: string, newStatus: RequestS
   });
 
   // Notify the CM about their request status change
+  let notifTitle = "📋 Pickup Request Updated";
+  let notifBody = `Your pickup request is now: ${newStatus.replace(/_/g, " ")}`;
+
+  if (newStatus === "UNABLE_TO_FIND") {
+    notifTitle = "🚨 Vehicle Not Found";
+    notifBody = "We're unable to find a vehicle for your pickup. Please try finding one yourself and keep us updated.";
+  }
+
   sendPushToUser(existing.cmId, {
-    title: "📋 Pickup Request Updated",
-    body: `Your pickup request is now: ${newStatus.replace(/_/g, " ")}`,
+    title: notifTitle,
+    body: notifBody,
     url: "/pickups",
   }).catch(console.error);
 
@@ -573,13 +593,27 @@ export async function resolveUrgentApproval(approvalId: string, approve: boolean
 
       // Update master request totals
       const master = approval.masterRequest;
+      const finalWeight = master.totalEstWeight + stopData.estWeight;
+      const finalBags = master.totalEstBags + (stopData.estBags || 0);
+
       await prisma.masterRequest.update({
         where: { id: master.id },
         data: {
-          totalEstWeight: master.totalEstWeight + stopData.estWeight,
-          totalEstBags: master.totalEstBags + (stopData.estBags || 0),
+          totalEstWeight: finalWeight,
+          totalEstBags: finalBags,
         },
       });
+
+      // Update delivery financials
+      const delivery = await prisma.deliveryDetail.findUnique({ where: { masterReqId: master.id } });
+      if (delivery) {
+        const totalWeightInTons = finalWeight ? finalWeight / 1000 : 0;
+        const idealPayment = delivery.ratePerTon ? delivery.ratePerTon * totalWeightInTons : delivery.idealPayment;
+        await prisma.deliveryDetail.update({
+          where: { id: delivery.id },
+          data: { totalWeightFinal: finalWeight, totalBags: finalBags, idealPayment },
+        });
+      }
     } else if (pendingData.type === "updateChildPickup") {
       const { childId, changes } = pendingData;
       await prisma.childPickup.update({
@@ -593,6 +627,39 @@ export async function resolveUrgentApproval(approvalId: string, approve: boolean
           ...(changes.loadingStatus !== undefined && { loadingStatus: changes.loadingStatus as any }),
         },
       });
+
+      // Recalculate totals and update master request / delivery
+      const masterWithChildren = await prisma.masterRequest.findUnique({
+        where: { id: approval.masterReqId },
+        include: { childPickups: { select: { actualWeight: true, estWeight: true, actualBags: true, estBags: true } } },
+      });
+
+      if (masterWithChildren) {
+        const finalWeight = masterWithChildren.childPickups.reduce(
+          (sum: number, c: any) => sum + (c.actualWeight || c.estWeight || 0),
+          0
+        );
+        const finalBags = masterWithChildren.childPickups.reduce(
+          (sum: number, c: any) => sum + (c.actualBags || c.estBags || 0),
+          0
+        );
+
+        await prisma.masterRequest.update({
+          where: { id: masterWithChildren.id },
+          data: { totalEstWeight: finalWeight, totalEstBags: finalBags },
+        });
+
+        // Update delivery financials if they exist
+        const delivery = await prisma.deliveryDetail.findUnique({ where: { masterReqId: masterWithChildren.id } });
+        if (delivery) {
+          const totalWeightInTons = finalWeight ? finalWeight / 1000 : 0;
+          const idealPayment = delivery.ratePerTon ? delivery.ratePerTon * totalWeightInTons : delivery.idealPayment;
+          await prisma.deliveryDetail.update({
+            where: { id: delivery.id },
+            data: { totalWeightFinal: finalWeight, totalBags: finalBags, idealPayment },
+          });
+        }
+      }
     }
 
     await logActivity(user.id, "URGENT_APPROVAL_APPROVED", "UrgentApproval", approvalId, null, {

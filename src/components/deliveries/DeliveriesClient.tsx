@@ -13,15 +13,25 @@ import { useRouter } from "next/navigation";
 import { ChatPopup } from "../shared/ChatPopup";
 import { LogDiff } from "../shared/LogDiff";
 
-const STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "UNLOADING", "COMPLETED"];
+const STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "AT_FACTORY", "COMPLETED", "RECEIPT_SUBMITTED"];
+
+// Display label overrides for statuses
+const STEP_DISPLAY_NAMES: Record<string, string> = {
+  COMPLETED: "OFF LOADED",
+};
+
+function getStepDisplayName(step: string): string {
+  return STEP_DISPLAY_NAMES[step] || step.replace(/_/g, " ");
+}
 
 // Color map for each status step
 const STEP_COLORS: Record<string, { done: string; text: string; line: string }> = {
   SCHEDULED:  { done: "bg-blue-500",    text: "text-blue-500",    line: "bg-blue-500" },
   LOADING:    { done: "bg-amber-500",   text: "text-amber-500",   line: "bg-amber-500" },
   IN_TRANSIT: { done: "bg-violet-500",  text: "text-violet-500",  line: "bg-violet-500" },
-  UNLOADING:  { done: "bg-orange-500",  text: "text-orange-500",  line: "bg-orange-500" },
+  AT_FACTORY: { done: "bg-orange-500",  text: "text-orange-500",  line: "bg-orange-500" },
   COMPLETED:  { done: "bg-emerald-500", text: "text-emerald-500", line: "bg-emerald-500" },
+  RECEIPT_SUBMITTED: { done: "bg-teal-500", text: "text-teal-500", line: "bg-teal-500" },
 };
 
 function escapeXml(value: unknown): string {
@@ -129,11 +139,15 @@ function groupLogsByDate(logs: any[]) {
   return groups;
 }
 
-function EditableField({ id, label, initialValue, fieldKey, type = "number", validate, variant = "ghost" }: any) {
+function EditableField({ id, label, initialValue, fieldKey, type = "number", validate, variant = "ghost", isReadonly = false, onBeforeChange }: any) {
   const router = useRouter();
   const [val, setVal] = useState(initialValue || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVal(initialValue || "");
+  }, [initialValue]);
 
   // Allow consumer to pass a global callback to update parent state after API call
   // This is a quick fix; a robust solution would use a React context or lift state up completely.
@@ -143,6 +157,12 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
     if (type === "number" && val === "") finalVal = 0; // handle empty numeric clearing
     if (type === "number" && isNaN(finalVal as number)) return;
     if (finalVal === initialValue) return;
+
+    // Optional confirmation gate (used for financial fields after payment)
+    if (onBeforeChange && !onBeforeChange()) {
+      setVal(initialValue || "");
+      return;
+    }
 
     if (validate) {
       const errMsg = validate(finalVal);
@@ -180,7 +200,7 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
         value={val}
         onChange={(e) => setVal(e.target.value)}
         onBlur={handleBlur}
-        disabled={loading}
+        disabled={loading || isReadonly}
         className={cn(
           "w-full mt-1 px-2 py-1 border rounded text-sm font-medium transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:opacity-50",
           variant === "gray" 
@@ -190,6 +210,47 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
       />
       {type === "date" && <span className="text-[10px] text-gray-400 absolute bottom-1 right-2 pointer-events-none pb-1">{val ? "" : "Select Date"}</span>}
       {error && <span className="text-[10px] text-red-500 mt-1 block">{error}</span>}
+    </div>
+  );
+}
+
+// ─── Phone Field with Dial/Copy Button ───────────────────
+function PhoneField({ id, fieldKey, label, initialValue, isReadonly = false, onBeforeChange }: any) {
+  const [copied, setCopied] = useState(false);
+
+  const handleDial = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const phone = initialValue?.toString().trim();
+    if (!phone) return;
+
+    // Check if mobile device
+    const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+      window.location.href = `tel:${phone}`;
+    } else {
+      navigator.clipboard.writeText(phone).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  };
+
+  return (
+    <div className="relative">
+      <EditableField id={id} fieldKey={fieldKey} label={label} type="text" initialValue={initialValue} isReadonly={isReadonly} onBeforeChange={onBeforeChange} />
+      {initialValue && (
+        <button
+          onClick={handleDial}
+          className="absolute right-1 bottom-1 p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 transition-colors"
+          title={copied ? "Copied!" : "Call / Copy number"}
+        >
+          {copied ? (
+            <CheckCircle2 className="w-3.5 h-3.5" />
+          ) : (
+            <Phone className="w-3.5 h-3.5" />
+          )}
+        </button>
+      )}
     </div>
   );
 }
@@ -295,9 +356,67 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
   );
 }
 
+// ─── Receipt Prompt Popup ────────────────────────────────
+function ReceiptPromptPopup({ delivery, onClose, onConfirm }: { delivery: any; onClose: () => void; onConfirm: (receiptUrl: string) => void }) {
+  const [receiptUrl, setReceiptUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    await onConfirm(receiptUrl);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-end justify-center p-0 sm:items-center sm:p-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative w-full max-w-md card p-4 z-10 space-y-4 rounded-b-none sm:rounded-b-2xl"
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
+            <FileText className="w-4 h-4 text-teal-500" /> Upload Receipt
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+        
+        <p className="text-xs text-gray-500">Provide a link or base64 representation of the submitted receipt to complete the workflow.</p>
+        
+        <div>
+          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Receipt Image URL</label>
+          <input
+            type="text"
+            value={receiptUrl}
+            onChange={(e) => setReceiptUrl(e.target.value)}
+            className="input w-full text-sm"
+            placeholder="https://..."
+          />
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={onClose} className="btn-secondary flex-1 text-sm bg-gray-100 dark:bg-gray-800 border-transparent">Skip</button>
+          <button onClick={handleConfirm} disabled={loading || !receiptUrl.trim()} className="btn-primary flex-1 text-sm !bg-teal-600 hover:!bg-teal-700 border-teal-600">
+            {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "Submit Receipt"}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 interface DeliveriesClientProps {
   deliveries: any[];
   initialFilter?: string;
+  isCM?: boolean;
 }
 
 // ─── Invoice Prompt Popup ────────────────────────────────
@@ -313,7 +432,7 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-sm card p-4 z-10 space-y-3 rounded-b-none sm:rounded-b-2xl">
         <div className="flex items-center justify-between">
@@ -341,13 +460,14 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
   );
 }
 
-export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter }: DeliveriesClientProps) {
+export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter, isCM = false }: DeliveriesClientProps) {
   const router = useRouter();
   const [deliveries, setDeliveries] = useState(initialDeliveries);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState(initialFilter || "ALL");
   const [completingDelivery, setCompletingDelivery] = useState<any>(null);
   const [invoicePromptDelivery, setInvoicePromptDelivery] = useState<any>(null);
+  const [receiptPromptDelivery, setReceiptPromptDelivery] = useState<any>(null);
   const [chatReqId, setChatReqId] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<Record<string, any[]>>({});
   const [showActivity, setShowActivity] = useState<string | null>(null);
@@ -394,6 +514,10 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
         setCompletingDelivery(delivery);
         return;
       }
+      if (nextStatus === "RECEIPT_SUBMITTED") {
+        setReceiptPromptDelivery(delivery);
+        return;
+      }
       if (nextStatus === "IN_TRANSIT" && !delivery.invoiceNo) {
         setInvoicePromptDelivery(delivery);
         return;
@@ -436,6 +560,17 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
     await updateDeliveryStatus(completingDelivery.id, "COMPLETED" as any);
     await refreshActivityLogs(completingDelivery.id);
     setCompletingDelivery(null);
+    router.refresh();
+  };
+
+  const handleReceiptConfirm = async (receiptUrl: string) => {
+    if (!receiptPromptDelivery) return;
+    // Optimistic update
+    setDeliveries((prev) => prev.map((d: any) => d.id === receiptPromptDelivery.id ? { ...d, status: "RECEIPT_SUBMITTED", receiptUrl } : d));
+    await updateDelivery(receiptPromptDelivery.id, { receiptUrl });
+    await updateDeliveryStatus(receiptPromptDelivery.id, "RECEIPT_SUBMITTED" as any);
+    await refreshActivityLogs(receiptPromptDelivery.id);
+    setReceiptPromptDelivery(null);
     router.refresh();
   };
 
@@ -573,7 +708,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                       />
                     </div>
                     <span className={`badge text-[10px] shrink-0 ${getStatusColor(del.status)}`}>
-                      {del.status.replace(/_/g, " ")}
+                      {getStepDisplayName(del.status)}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-1">
@@ -671,7 +806,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                                 "w-12 text-center -mx-3 leading-tight font-medium",
                                 isDone ? color.text : "text-gray-400"
                               )}>
-                                {s.replace(/_/g, " ")}
+                                {getStepDisplayName(s)}
                               </span>
                             );
                           })}
@@ -735,10 +870,10 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                             <Truck className="w-3.5 h-3.5 text-blue-500" /> Logistics Details
                           </h4>
                           <div className="grid grid-cols-2 gap-2 text-xs">
-                            <EditableField id={del.id} fieldKey="driverName" label="Driver" type="text" initialValue={del.driverName} />
-                            <EditableField id={del.id} fieldKey="driverContact" label="Driver Contact" type="text" initialValue={del.driverContact} />
-                            <EditableField id={del.id} fieldKey="transporterName" label="Transporter" type="text" initialValue={del.transporterName} />
-                            <EditableField id={del.id} fieldKey="invoiceNo" label="Invoice No" type="text" initialValue={del.invoiceNo} />
+                            <EditableField id={del.id} fieldKey="driverName" label="Driver" type="text" initialValue={del.driverName} isReadonly={isCM} />
+                            <PhoneField id={del.id} fieldKey="driverContact" label="Driver Contact" initialValue={del.driverContact} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="transporterName" label="Transporter" type="text" initialValue={del.transporterName} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="invoiceNo" label="Invoice No" type="text" initialValue={del.invoiceNo} isReadonly={isCM} />
                             <div>
                               <span className="text-gray-500 text-xs">Total Cargo</span>
                               <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">
@@ -753,27 +888,23 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                           <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-2">
                             <Calendar className="w-3.5 h-3.5 text-orange-500" /> Timeline
                           </h4>
-                          <div className="grid grid-cols-3 gap-2 text-xs">
-                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected" type="date" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().split('T')[0] : ""} />
-                            <div>
-                              <span className="text-gray-500">Actual</span>
-                              <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">{formatDate(del.actualDeliveryDt) || "—"}</p>
-                            </div>
-                            <div>
-                              <span className="text-gray-500">Unloading</span>
-                              <p className="font-medium text-gray-900 dark:text-white mt-1 text-sm">{formatDate(del.unloadingDt) || "—"}</p>
-                            </div>
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <EditableField id={del.id} fieldKey="scheduledPickupTime" label="Scheduled Pickup" type="datetime-local" initialValue={del.scheduledPickupTime ? new Date(del.scheduledPickupTime).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected Delivery" type="date" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().split('T')[0] : ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="actualDeliveryDt" label="Actual Delivery" type="datetime-local" initialValue={del.actualDeliveryDt ? new Date(del.actualDeliveryDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="unloadingDt" label="Factory Reached" type="datetime-local" initialValue={del.unloadingDt ? new Date(del.unloadingDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
                           </div>
                         </div>
 
                         {/* Card 3: Financial Summary (Receipt Ledger Pattern) */}
+                        {!isCM && (
                         <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
                           <div className="px-3 py-2.5 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
                             <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
                               <ScrollText className="w-3.5 h-3.5 text-emerald-500" /> Financial Summary
                             </h4>
                             <div className="w-28 text-right">
-                              <EditableField id={del.id} fieldKey="ratePerTon" label="" initialValue={del.ratePerTon} variant="gray" />
+                              <EditableField id={del.id} fieldKey="ratePerTon" label="" initialValue={del.ratePerTon} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                               <div className="text-[10px] text-gray-400 mt-0.5">Rate / Ton (₹)</div>
                             </div>
                           </div>
@@ -794,7 +925,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                                 <span className="text-gray-500">Advance Paid</span>
                                 <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.advancePaid ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="advancePaid" label="" initialValue={del.advancePaid} variant="gray" />
+                                  <EditableField id={del.id} fieldKey="advancePaid" label="" initialValue={del.advancePaid} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                 </div>
                               </div>
                               
@@ -803,7 +934,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                                 <span className="text-gray-500">Misc Amount</span>
                                 <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.miscAmount ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="miscAmount" label="" initialValue={del.miscAmount} variant="gray" />
+                                  <EditableField id={del.id} fieldKey="miscAmount" label="" initialValue={del.miscAmount} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                 </div>
                               </div>
                               
@@ -812,18 +943,18 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                                 <span className="text-gray-500">Waiting Charges</span>
                                 <div className="w-28 text-right flex items-center justify-end gap-1">
                                   {del.waitingCharges ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="waitingCharges" label="" initialValue={del.waitingCharges} variant="gray" />
+                                  <EditableField id={del.id} fieldKey="waitingCharges" label="" initialValue={del.waitingCharges} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                 </div>
                               </div>
                             </div>
 
                             {/* The "Bottom Line" Callout Block - Changes based on completion */}
-                            {del.status === "COMPLETED" ? (
+                            {(del.status === "COMPLETED" || del.status === "RECEIPT_SUBMITTED") ? (
                               <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
                                 <div className="flex justify-between items-center">
                                   <span className="text-gray-600 dark:text-gray-300 font-medium">Balance Paid</span>
                                   <div className="w-28 text-right">
-                                    <EditableField id={del.id} fieldKey="actuallyPaid" label="" initialValue={del.actuallyPaid} variant="gray" />
+                                    <EditableField id={del.id} fieldKey="actuallyPaid" label="" initialValue={del.actuallyPaid} variant="gray" onBeforeChange={del.actuallyPaid ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                   </div>
                                 </div>
                                 <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl">
@@ -832,6 +963,13 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
                                     {formatCurrency((del.actuallyPaid || 0) + (del.advancePaid || 0) + (del.miscAmount || 0) + (del.waitingCharges || 0))}
                                   </span>
                                 </div>
+                                {/* Payment Completed Banner */}
+                                {del.actuallyPaid != null && del.actuallyPaid > 0 && (
+                                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Payment Completed</span>
+                                  </div>
+                                )}
                               </div>
                             ) : (
                               <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-800">
@@ -846,29 +984,30 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
 
                           </div>
                         </div>
+                        )}
                       </div>
 
                       {/* Action buttons row */}
                       <div className="flex gap-1.5 flex-wrap">
                         {/* Undo status button */}
-                        {STEPS.indexOf(del.status) > 0 && (
+                        {!isCM && STEPS.indexOf(del.status) > 0 && (
                           <button
                             onClick={() => handleStatusUndo(del.id, del.status)}
                             className="text-[11px] font-medium flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 active:bg-red-100 dark:active:bg-red-900/40 transition-colors"
                           >
                             <Undo2 className="w-3 h-3" />
-                            Back to {STEPS[STEPS.indexOf(del.status) - 1]?.replace(/_/g, " ")}
+                            Back to {getStepDisplayName(STEPS[STEPS.indexOf(del.status) - 1] || "")}
                           </button>
                         )}
 
                         {/* Advance status button */}
-                        {del.status !== "COMPLETED" && (
+                        {!isCM && del.status !== "RECEIPT_SUBMITTED" && (
                           <button
                             onClick={() => handleStatusAdvance(del.id, del.status, del)}
                             className="btn-primary text-[11px] px-2.5 py-1.5"
                           >
                             <CheckCircle2 className="w-3 h-3" />
-                            Advance to {STEPS[STEPS.indexOf(del.status) + 1]?.replace(/_/g, " ")}
+                            {del.status === "COMPLETED" ? "Upload Receipt" : `Advance to ${getStepDisplayName(STEPS[STEPS.indexOf(del.status) + 1] || "")}`}
                           </button>
                         )}
 
@@ -1006,6 +1145,15 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
           delivery={invoicePromptDelivery}
           onClose={() => setInvoicePromptDelivery(null)}
           onConfirm={handleInvoiceConfirm}
+        />
+      )}
+
+      {/* Receipt Prompt Popup */}
+      {receiptPromptDelivery && (
+        <ReceiptPromptPopup
+          delivery={receiptPromptDelivery}
+          onClose={() => setReceiptPromptDelivery(null)}
+          onConfirm={handleReceiptConfirm}
         />
       )}
 

@@ -11,8 +11,13 @@ import { sendPushToUser } from "@/lib/webpush";
 export async function getDeliveries(filters?: { status?: string }) {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
+  const user = session.user as any;
 
   const where: any = {};
+  if (user.role === "CM") {
+    where.masterRequest = { cmId: user.id };
+  }
+  
   if (filters?.status && filters.status !== "ALL") {
     where.status = filters.status;
   }
@@ -137,10 +142,10 @@ export async function createDelivery(data: {
   transporterName?: string;
   transpContact?: string;
   expDeliveryDt?: string;
+  scheduledPickupTime?: string;
   ratePerTon?: number;
   advancePaid?: number;
   miscAmount?: number;
-  totalBags?: number;
   invoiceNo?: string;
 }) {
   const session = await auth();
@@ -176,8 +181,9 @@ export async function createDelivery(data: {
       idealPayment,
       advancePaid: data.advancePaid || null,
       miscAmount: data.miscAmount || null,
-      totalBags: data.totalBags || null,
+      totalBags: masterReq?.totalEstBags || null,
       invoiceNo: data.invoiceNo || null,
+      scheduledPickupTime: data.scheduledPickupTime ? new Date(data.scheduledPickupTime) : null,
       createdById: user.id,
     },
   });
@@ -224,6 +230,8 @@ export async function updateDelivery(
     actuallyPaid?: number;
     invoiceNo?: string;
     totalBags?: number;
+    receiptUrl?: string;
+    scheduledPickupTime?: string;
     status?: DeliveryStatus;
   }
 ) {
@@ -259,6 +267,8 @@ export async function updateDelivery(
   if (data.advancePaid !== undefined) updateData.advancePaid = data.advancePaid;
   if (data.actuallyPaid !== undefined) updateData.actuallyPaid = data.actuallyPaid;
   if (data.invoiceNo !== undefined) updateData.invoiceNo = data.invoiceNo;
+  if (data.receiptUrl !== undefined) updateData.receiptUrl = data.receiptUrl;
+  if (data.scheduledPickupTime !== undefined) updateData.scheduledPickupTime = new Date(data.scheduledPickupTime);
   if (data.totalBags !== undefined) updateData.totalBags = data.totalBags;
   if (data.status !== undefined) updateData.status = data.status;
 
@@ -334,7 +344,7 @@ export async function updateDeliveryStatus(id: string, newStatus: DeliveryStatus
 
 // ─── Undo Delivery Status (go back one step) ────────────
 
-const DELIVERY_STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "UNLOADING", "COMPLETED"] as DeliveryStatus[];
+const DELIVERY_STEPS: DeliveryStatus[] = ["SCHEDULED", "LOADING", "IN_TRANSIT", "AT_FACTORY", "COMPLETED", "RECEIPT_SUBMITTED"];
 
 export async function undoDeliveryStatus(id: string) {
   const session = await auth();

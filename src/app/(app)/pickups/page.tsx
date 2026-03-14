@@ -2,7 +2,8 @@ import { Header } from "@/components/layout/Header";
 import { getPickups, getUserCenters, getFactories } from "@/actions/pickups";
 import { PickupsClient } from "@/components/pickups/PickupsClient";
 
-export default async function PickupsPage() {
+export default async function PickupsPage({ searchParams }: { searchParams: Promise<{ status?: string; highlight?: string }> }) {
+  const params = await searchParams;
   const [pickups, centers, factories] = await Promise.all([
     getPickups(),
     getUserCenters(),
@@ -17,6 +18,8 @@ export default async function PickupsPage() {
           pickups={JSON.parse(JSON.stringify(pickups))}
           centers={JSON.parse(JSON.stringify(centers))}
           factories={JSON.parse(JSON.stringify(factories))}
+          initialStatusFilter={params.status || "ALL"}
+          highlightId={params.highlight}
         />
       </div>
     </>

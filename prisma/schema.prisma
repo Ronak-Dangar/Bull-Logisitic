@@ -28,6 +28,7 @@ enum PickupLocationType {
 enum RequestStatus {
   SUBMITTED
   FINDING_VEHICLE
+  UNABLE_TO_FIND
   PROCESSED
   OVER_TO_NEXT
   REJECTED
@@ -42,8 +43,9 @@ enum DeliveryStatus {
   SCHEDULED
   LOADING
   IN_TRANSIT
-  UNLOADING
+  AT_FACTORY
   COMPLETED
+  RECEIPT_SUBMITTED
 }
 
 enum UrgentApprovalStatus {
@@ -192,6 +194,8 @@ model DeliveryDetail {
   actuallyPaid     Float?         @map("actually_paid")
   totalBags        Int?           @map("total_bags")
   invoiceNo        String?        @map("invoice_no")
+  receiptUrl       String?        @map("receipt_url")
+  scheduledPickupTime DateTime?   @map("scheduled_pickup_time")
   createdById      String?        @map("created_by_id")
   createdAt        DateTime       @default(now()) @map("created_at")
   updatedAt        DateTime       @updatedAt @map("updated_at")

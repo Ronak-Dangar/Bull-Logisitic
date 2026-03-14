@@ -25,10 +25,10 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
     transporterName: "",
     transpContact: "",
     expDeliveryDt: "",
+    scheduledPickupTime: "",
     ratePerTon: "",
     advancePaid: "",
     miscAmount: "",
-    totalBags: "",
     invoiceNo: "",
   });
 
@@ -58,15 +58,16 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
         transporterName: form.transporterName || undefined,
         transpContact: form.transpContact || undefined,
         expDeliveryDt: form.expDeliveryDt || undefined,
+        scheduledPickupTime: form.scheduledPickupTime || undefined,
         ratePerTon: form.ratePerTon ? Number(form.ratePerTon) : undefined,
         advancePaid: form.advancePaid ? Number(form.advancePaid) : undefined,
         miscAmount: form.miscAmount ? Number(form.miscAmount) : undefined,
-        totalBags: form.totalBags ? Number(form.totalBags) : undefined,
         invoiceNo: form.invoiceNo || undefined,
       });
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -152,13 +153,13 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
               <h3 className="text-sm font-bold text-gray-900 dark:text-white mb-2">Cargo & Documentation</h3>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Delivery</label>
-                <input type="date" value={form.expDeliveryDt} onChange={(e) => update("expDeliveryDt", e.target.value)} className="input w-full" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Scheduled Pickup Time</label>
+                <input type="datetime-local" value={form.scheduledPickupTime} onChange={(e) => update("scheduledPickupTime", e.target.value)} className="input w-full" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Total Bags</label>
-                <input type="number" value={form.totalBags} onChange={(e) => update("totalBags", e.target.value)} className="input w-full" />
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Delivery</label>
+                <input type="date" value={form.expDeliveryDt} onChange={(e) => update("expDeliveryDt", e.target.value)} className="input w-full" />
               </div>
 
               <div>

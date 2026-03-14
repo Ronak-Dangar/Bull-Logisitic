@@ -64,8 +64,9 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
         })),
       });
       onSuccess();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || "An error occurred while saving the request");
     } finally {
       setLoading(false);
     }
@@ -94,8 +95,8 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
         <div className="sticky top-0 z-30 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-5 py-4 flex items-center justify-between">
           <h2 className="text-lg flex flex-col font-bold text-gray-900 dark:text-white">
             New Pickup Request
-            {pickupDate && (
-              <span className="text-xs font-normal text-gray-500 dark:text-gray-400 mt-0.5">
+            {pickupDate && commodity && (
+              <span className="text-[10px] font-semibold tracking-wide text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-700">
                 📅 {new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(pickupDate))} • {commodity} {factoryId && '• Factory'}
               </span>
             )}

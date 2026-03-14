@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Package, Truck, CheckCircle2, Moon, TrendingUp, Clock, Undo } from "lucide-react";
+import { Package, Truck, AlertTriangle, Moon, TrendingUp, Clock, Undo } from "lucide-react";
 import { formatWeight, formatDate, getStatusColor } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { undoActivity } from "@/actions/dashboard";
@@ -11,35 +11,37 @@ import { UrgentApprovalBanner } from "./UrgentApprovalBanner";
 const iconMap: Record<string, React.ElementType> = {
   totalRequests: Package,
   inTransit: Truck,
-  completedToday: CheckCircle2,
+  incompleteDeliveries: AlertTriangle,
   overToNext: Moon,
 };
 
 const colorMap: Record<string, string> = {
   totalRequests: "from-blue-500 to-blue-600",
   inTransit: "from-cyan-500 to-cyan-600",
-  completedToday: "from-emerald-500 to-emerald-600",
+  incompleteDeliveries: "from-amber-500 to-orange-600",
   overToNext: "from-rose-500 to-pink-600",
 };
 
 const labelMap: Record<string, string> = {
   totalRequests: "Total Requests",
   inTransit: "In Transit",
-  completedToday: "Completed Today",
+  incompleteDeliveries: "Incomplete Deliveries",
   overToNext: "Over to Next",
 };
 
 // Navigation targets for clickable cards
 const linkMap: Record<string, string> = {
+  totalRequests: "/pickups",
   inTransit: "/deliveries?status=IN_TRANSIT",
-  completedToday: "/deliveries?status=COMPLETED",
+  incompleteDeliveries: "/deliveries",
+  overToNext: "/pickups?status=OVER_TO_NEXT",
 };
 
 interface DashboardClientProps {
   kpis: {
     totalRequests: number;
     inTransit: number;
-    completedToday: number;
+    incompleteDeliveries: number;
     overToNext: number;
   };
   statusDistribution: { name: string; value: number }[];
@@ -175,7 +177,8 @@ export function DashboardClient({
               recentRequests.map((req: any) => (
                 <div
                   key={req.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  onClick={() => router.push(`/pickups?highlight=${req.id}`)}
+                  className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer active:scale-[0.98]"
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center">
