@@ -869,7 +869,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                           <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-2">
                             <Truck className="w-3.5 h-3.5 text-blue-500" /> Logistics Details
                           </h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                             <EditableField id={del.id} fieldKey="driverName" label="Driver" type="text" initialValue={del.driverName} isReadonly={isCM} />
                             <PhoneField id={del.id} fieldKey="driverContact" label="Driver Contact" initialValue={del.driverContact} isReadonly={isCM} />
                             <EditableField id={del.id} fieldKey="transporterName" label="Transporter" type="text" initialValue={del.transporterName} isReadonly={isCM} />
@@ -888,7 +888,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                           <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-2">
                             <Calendar className="w-3.5 h-3.5 text-orange-500" /> Timeline
                           </h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                             <EditableField id={del.id} fieldKey="scheduledPickupTime" label="Scheduled Pickup" type="datetime-local" initialValue={del.scheduledPickupTime ? new Date(del.scheduledPickupTime).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
                             <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected Delivery" type="datetime-local" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
                             <EditableField id={del.id} fieldKey="actualDeliveryDt" label="Actual Delivery" type="datetime-local" initialValue={del.actualDeliveryDt ? new Date(del.actualDeliveryDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
