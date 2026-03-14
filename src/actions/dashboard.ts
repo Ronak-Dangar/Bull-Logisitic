@@ -18,11 +18,6 @@ export async function getDashboardKPIs() {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
 
-<<<<<<< Updated upstream
-  const todayStart = new Date(new Date().setHours(0, 0, 0, 0));
-  const tomorrowStart = new Date(todayStart);
-  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
-=======
   const incompleteDeliveriesPromise = prisma.deliveryDetail
     .count({
       where: {
@@ -42,21 +37,11 @@ export async function getDashboardKPIs() {
       throw error;
     });
 
->>>>>>> Stashed changes
 
   const [totalRequests, inTransit, completedToday, overToNext] = await Promise.all([
     prisma.masterRequest.count(),
     prisma.deliveryDetail.count({ where: { status: "IN_TRANSIT" } }),
-<<<<<<< Updated upstream
-    prisma.deliveryDetail.count({
-      where: {
-        status: "COMPLETED",
-        updatedAt: { gte: todayStart },
-      },
-    }),
-=======
     incompleteDeliveriesPromise,
->>>>>>> Stashed changes
     prisma.masterRequest.count({ where: { status: "OVER_TO_NEXT" } }),
   ]);
 
