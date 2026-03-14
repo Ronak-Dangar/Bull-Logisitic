@@ -34,6 +34,50 @@ const STEP_COLORS: Record<string, { done: string; text: string; line: string }> 
   RECEIPT_SUBMITTED: { done: "bg-teal-500", text: "text-teal-500", line: "bg-teal-500" },
 };
 
+const ADVANCE_STATUS_STYLES: Record<string, { button: string; dot: string }> = {
+  LOADING: {
+    button: "bg-amber-600 hover:bg-amber-700 border-amber-500 text-white shadow-sm shadow-amber-700/20",
+    dot: "bg-amber-100",
+  },
+  IN_TRANSIT: {
+    button: "bg-violet-600 hover:bg-violet-700 border-violet-500 text-white shadow-sm shadow-violet-700/20",
+    dot: "bg-violet-100",
+  },
+  AT_FACTORY: {
+    button: "bg-orange-600 hover:bg-orange-700 border-orange-500 text-white shadow-sm shadow-orange-700/20",
+    dot: "bg-orange-100",
+  },
+  COMPLETED: {
+    button: "bg-emerald-600 hover:bg-emerald-700 border-emerald-500 text-white shadow-sm shadow-emerald-700/20",
+    dot: "bg-emerald-100",
+  },
+  RECEIPT_SUBMITTED: {
+    button: "bg-teal-600 hover:bg-teal-700 border-teal-500 text-white shadow-sm shadow-teal-700/20",
+    dot: "bg-teal-100",
+  },
+};
+
+function getNextStep(status: string): string {
+  const idx = STEPS.indexOf(status);
+  if (idx < 0 || idx >= STEPS.length - 1) return "";
+  return STEPS[idx + 1];
+}
+
+function getAdvanceButtonClass(currentStatus: string): string {
+  const nextStep = getNextStep(currentStatus);
+  const tone = ADVANCE_STATUS_STYLES[nextStep];
+  return cn(
+    "min-h-10 w-full rounded-lg border text-[11px] font-semibold px-2.5 py-1.5",
+    "flex items-center justify-center gap-1.5 transition-colors",
+    tone?.button || "bg-cyan-600 hover:bg-cyan-700 border-cyan-500 text-white shadow-sm shadow-cyan-700/20"
+  );
+}
+
+function getAdvanceDotClass(currentStatus: string): string {
+  const nextStep = getNextStep(currentStatus);
+  return ADVANCE_STATUS_STYLES[nextStep]?.dot || "bg-cyan-400";
+}
+
 function escapeXml(value: unknown): string {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -1194,34 +1238,53 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                       </div>
 
                       {/* Action buttons row */}
-                      <div className="flex gap-1.5 flex-wrap">
-                        {/* Undo status button */}
-                        {!isCM && STEPS.indexOf(del.status) > 0 && (
-                          <button
-                            onClick={() => handleStatusUndo(del.id, del.status)}
-                            className="text-[11px] font-medium flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 active:bg-red-100 dark:active:bg-red-900/40 transition-colors"
-                          >
-                            <Undo2 className="w-3 h-3" />
-                            Back to {getStepDisplayName(STEPS[STEPS.indexOf(del.status) - 1] || "")}
-                          </button>
-                        )}
+                      <div className="space-y-2">
+                        {!isCM && (
+                          <div className="grid grid-cols-2 gap-2">
+                            {STEPS.indexOf(del.status) > 0 ? (
+                              <button
+                                onClick={() => handleStatusUndo(del.id, del.status)}
+                                className="min-h-10 w-full rounded-lg border border-rose-500 text-white text-[11px] font-semibold px-2.5 py-1.5 flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 transition-colors shadow-sm shadow-rose-700/20"
+                              >
+                                <Undo2 className="w-3 h-3 shrink-0" />
+                                <span className="text-center leading-tight whitespace-normal wrap-break-word">
+                                  <span className="block">Back to</span>
+                                  <span className="block">{getStepDisplayName(STEPS[STEPS.indexOf(del.status) - 1] || "")}</span>
+                                </span>
+                              </button>
+                            ) : (
+                              <div className="h-9" />
+                            )}
 
-                        {/* Advance status button */}
-                        {!isCM && del.status !== "RECEIPT_SUBMITTED" && (
-                          <button
-                            onClick={() => handleStatusAdvance(del.id, del.status, del)}
-                            className="btn-primary text-[11px] px-2.5 py-1.5"
-                          >
-                            <CheckCircle2 className="w-3 h-3" />
-                            {del.status === "COMPLETED" ? "Upload Receipt" : `Advance to ${getStepDisplayName(STEPS[STEPS.indexOf(del.status) + 1] || "")}`}
-                          </button>
+                            {del.status !== "RECEIPT_SUBMITTED" ? (
+                              <button
+                                onClick={() => handleStatusAdvance(del.id, del.status, del)}
+                                className={getAdvanceButtonClass(del.status)}
+                              >
+                                <span className={cn("w-2 h-2 rounded-full shrink-0", getAdvanceDotClass(del.status))} />
+                                {del.status === "COMPLETED" ? (
+                                  <span className="text-center leading-tight whitespace-normal wrap-break-word">
+                                    <span className="block">Upload</span>
+                                    <span className="block">Receipt</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-center leading-tight whitespace-normal wrap-break-word">
+                                    <span className="block">Advance to</span>
+                                    <span className="block">{getStepDisplayName(getNextStep(del.status) || "")}</span>
+                                  </span>
+                                )}
+                              </button>
+                            ) : (
+                              <div className="h-9" />
+                            )}
+                          </div>
                         )}
 
                         {/* Activity logs toggle */}
                         <button
                           onClick={() => toggleActivity(del.id)}
                           className={cn(
-                            "text-[11px] font-medium flex items-center gap-1 px-2.5 py-1.5 rounded-lg border transition-colors",
+                            "h-9 rounded-lg border text-[11px] font-medium flex items-center gap-1 px-2.5 transition-colors",
                             showActivity === del.id
                               ? "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300"
                               : "border-gray-200 dark:border-gray-700 text-gray-500 active:bg-gray-50 dark:active:bg-gray-800/50"
