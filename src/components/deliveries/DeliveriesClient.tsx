@@ -890,7 +890,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                           </h4>
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             <EditableField id={del.id} fieldKey="scheduledPickupTime" label="Scheduled Pickup" type="datetime-local" initialValue={del.scheduledPickupTime ? new Date(del.scheduledPickupTime).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
-                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected Delivery" type="date" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().split('T')[0] : ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected Delivery" type="datetime-local" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
                             <EditableField id={del.id} fieldKey="actualDeliveryDt" label="Actual Delivery" type="datetime-local" initialValue={del.actualDeliveryDt ? new Date(del.actualDeliveryDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
                             <EditableField id={del.id} fieldKey="unloadingDt" label="Factory Reached" type="datetime-local" initialValue={del.unloadingDt ? new Date(del.unloadingDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
                           </div>
