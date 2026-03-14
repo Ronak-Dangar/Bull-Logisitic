@@ -18,6 +18,7 @@ const STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "AT_FACTORY", "COMPLETED", 
 // Display label overrides for statuses
 const STEP_DISPLAY_NAMES: Record<string, string> = {
   COMPLETED: "OFF LOADED",
+  UNLOADING: "AT FACTORY",
 };
 
 function getStepDisplayName(step: string): string {
@@ -58,9 +59,27 @@ const ADVANCE_STATUS_STYLES: Record<string, { button: string; dot: string }> = {
 };
 
 function getNextStep(status: string): string {
+  // Legacy compatibility: UNLOADING existed in older data.
+  if (status === "UNLOADING") return "COMPLETED";
   const idx = STEPS.indexOf(status);
   if (idx < 0 || idx >= STEPS.length - 1) return "";
   return STEPS[idx + 1];
+}
+
+function getPrevStep(status: string): string {
+  // Legacy compatibility: treat UNLOADING as the step after AT_FACTORY.
+  if (status === "UNLOADING") return "AT_FACTORY";
+  const idx = STEPS.indexOf(status);
+  if (idx <= 0) return "";
+  return STEPS[idx - 1];
+}
+
+function canGoBack(status: string): boolean {
+  return !!getPrevStep(status);
+}
+
+function getFlowStatus(status: string): string {
+  return status === "UNLOADING" ? "AT_FACTORY" : status;
 }
 
 function getAdvanceButtonClass(currentStatus: string): string {
@@ -757,9 +776,8 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
   });
 
   const handleStatusAdvance = async (id: string, currentStatus: string, delivery: any) => {
-    const currentIndex = STEPS.indexOf(currentStatus);
-    if (currentIndex < STEPS.length - 1) {
-      const nextStatus = STEPS[currentIndex + 1];
+    const nextStatus = getNextStep(currentStatus);
+    if (nextStatus) {
       if (nextStatus === "COMPLETED") {
         setCompletingDelivery(delivery);
         return;
@@ -781,9 +799,8 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
   };
 
   const handleStatusUndo = async (id: string, currentStatus: string) => {
-    const currentIndex = STEPS.indexOf(currentStatus);
-    if (currentIndex <= 0) return;
-    const prevStatus = STEPS[currentIndex - 1];
+    const prevStatus = getPrevStep(currentStatus);
+    if (!prevStatus) return;
     // Optimistic update
     setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, status: prevStatus } : d));
     await undoDeliveryStatus(id);
@@ -1013,7 +1030,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                       <div className="relative pt-2">
                         <div className="flex items-center justify-between relative z-10">
                           {STEPS.map((step, i) => {
-                            const currentIdx = STEPS.indexOf(del.status);
+                            const currentIdx = STEPS.indexOf(getFlowStatus(del.status));
                             const isDone = i <= currentIdx;
                             const isCurrent = i === currentIdx;
                             const color = STEP_COLORS[step];
@@ -1035,7 +1052,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                         {/* Connecting Lines */}
                         <div className="absolute top-5 left-0 right-0 h-0.5 -translate-y-1/2 flex z-0 px-3">
                           {STEPS.slice(0, -1).map((step, i) => {
-                            const isDone = i < STEPS.indexOf(del.status);
+                            const isDone = i < STEPS.indexOf(getFlowStatus(del.status));
                             const nextStep = STEPS[i + 1];
                             const color = STEP_COLORS[nextStep];
                             return (
@@ -1048,7 +1065,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                         </div>
                         <div className="flex justify-between text-[9px] mt-2 px-1">
                           {STEPS.map((s, i) => {
-                            const currentIdx = STEPS.indexOf(del.status);
+                            const currentIdx = STEPS.indexOf(getFlowStatus(del.status));
                             const isDone = i <= currentIdx;
                             const color = STEP_COLORS[s];
                             return (
@@ -1241,7 +1258,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                       <div className="space-y-2">
                         {!isCM && (
                           <div className="grid grid-cols-2 gap-2">
-                            {STEPS.indexOf(del.status) > 0 ? (
+                            {canGoBack(del.status) ? (
                               <button
                                 onClick={() => handleStatusUndo(del.id, del.status)}
                                 className="min-h-10 w-full rounded-lg border border-rose-500 text-white text-[11px] font-semibold px-2.5 py-1.5 flex items-center justify-center gap-1.5 bg-rose-600 hover:bg-rose-700 transition-colors shadow-sm shadow-rose-700/20"
@@ -1249,7 +1266,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                 <Undo2 className="w-3 h-3 shrink-0" />
                                 <span className="text-center leading-tight whitespace-normal wrap-break-word">
                                   <span className="block">Back to</span>
-                                  <span className="block">{getStepDisplayName(STEPS[STEPS.indexOf(del.status) - 1] || "")}</span>
+                                  <span className="block">{getStepDisplayName(getPrevStep(del.status) || "")}</span>
                                 </span>
                               </button>
                             ) : (

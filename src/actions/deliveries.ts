@@ -337,6 +337,15 @@ export async function updateDeliveryStatus(id: string, newStatus: DeliveryStatus
       body: `Your ${masterReq.commodity} delivery is now: ${newStatus.replace(/_/g, " ")}`,
       url: "/deliveries",
     }).catch(console.error);
+
+    // Notify actor too (unless actor is the same CM already notified)
+    if (user?.id && user.id !== masterReq.cmId) {
+      sendPushToUser(user.id, {
+        title: "✅ Delivery Advanced",
+        body: `${masterReq.commodity} moved to: ${newStatus.replace(/_/g, " ")}`,
+        url: "/deliveries",
+      }).catch(console.error);
+    }
   }
 
   return updated;
@@ -346,6 +355,14 @@ export async function updateDeliveryStatus(id: string, newStatus: DeliveryStatus
 
 const DELIVERY_STEPS: DeliveryStatus[] = ["SCHEDULED", "LOADING", "IN_TRANSIT", "AT_FACTORY", "COMPLETED", "RECEIPT_SUBMITTED"];
 
+function getPreviousDeliveryStatus(status: DeliveryStatus): DeliveryStatus | null {
+  // Legacy compatibility: UNLOADING existed in older data.
+  if ((status as string) === "UNLOADING") return "AT_FACTORY";
+  const currentIndex = DELIVERY_STEPS.indexOf(status);
+  if (currentIndex <= 0) return null;
+  return DELIVERY_STEPS[currentIndex - 1];
+}
+
 export async function undoDeliveryStatus(id: string) {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
@@ -354,10 +371,8 @@ export async function undoDeliveryStatus(id: string) {
   const existing = await prisma.deliveryDetail.findUnique({ where: { id } });
   if (!existing) throw new Error("Delivery not found");
 
-  const currentIndex = DELIVERY_STEPS.indexOf(existing.status);
-  if (currentIndex <= 0) throw new Error("Cannot undo: already at the first status");
-
-  const prevStatus = DELIVERY_STEPS[currentIndex - 1];
+  const prevStatus = getPreviousDeliveryStatus(existing.status);
+  if (!prevStatus) throw new Error("Cannot undo: already at the first status");
   const updateData: any = { status: prevStatus };
 
   // Clear auto-set dates when rolling back
@@ -391,6 +406,15 @@ export async function undoDeliveryStatus(id: string) {
       body: `Your ${masterReq.commodity} delivery was reverted to: ${prevStatus.replace(/_/g, " ")}`,
       url: "/deliveries",
     }).catch(console.error);
+
+    // Notify actor too (unless actor is the same CM already notified)
+    if (user?.id && user.id !== masterReq.cmId) {
+      sendPushToUser(user.id, {
+        title: "↩️ Delivery Reverted",
+        body: `${masterReq.commodity} moved back to: ${prevStatus.replace(/_/g, " ")}`,
+        url: "/deliveries",
+      }).catch(console.error);
+    }
   }
 
   return updated;
