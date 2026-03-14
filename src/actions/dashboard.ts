@@ -3,45 +3,23 @@
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 
-function isMissingReceiptSubmittedEnum(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-
-  const msg = error.message;
-  return (
-    msg.includes("DeliveryStatus") &&
-    msg.includes("RECEIPT_SUBMITTED") &&
-    msg.includes("22P02")
-  );
-}
-
 export async function getDashboardKPIs() {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
 
-  const incompleteDeliveriesPromise = prisma.deliveryDetail
-    .count({
-      where: {
-        status: { not: "RECEIPT_SUBMITTED" },
-      },
-    })
-    .catch(async (error: unknown) => {
-      // Fallback for databases where DeliveryStatus enum has not yet been updated.
-      if (isMissingReceiptSubmittedEnum(error)) {
-        return prisma.deliveryDetail.count({
-          where: {
-            status: { not: "COMPLETED" },
-          },
-        });
-      }
-
-      throw error;
-    });
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
 
 
   const [totalRequests, inTransit, completedToday, overToNext] = await Promise.all([
     prisma.masterRequest.count(),
     prisma.deliveryDetail.count({ where: { status: "IN_TRANSIT" } }),
-    incompleteDeliveriesPromise,
+    prisma.deliveryDetail.count({
+      where: {
+        status: "COMPLETED",
+        actualDeliveryDt: { gte: todayStart },
+      },
+    }),
     prisma.masterRequest.count({ where: { status: "OVER_TO_NEXT" } }),
   ]);
 
