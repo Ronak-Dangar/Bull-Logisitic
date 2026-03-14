@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
-  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download, Phone
+  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download, Phone, Clock3
 } from "lucide-react";
 import { formatWeight, formatDate, formatCurrency, getStatusColor, cn } from "@/lib/utils";
 import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus, getDeliveriesExportData } from "@/actions/deliveries";
@@ -26,11 +26,11 @@ function getStepDisplayName(step: string): string {
 
 // Color map for each status step
 const STEP_COLORS: Record<string, { done: string; text: string; line: string }> = {
-  SCHEDULED:  { done: "bg-blue-500",    text: "text-blue-500",    line: "bg-blue-500" },
-  LOADING:    { done: "bg-amber-500",   text: "text-amber-500",   line: "bg-amber-500" },
-  IN_TRANSIT: { done: "bg-violet-500",  text: "text-violet-500",  line: "bg-violet-500" },
-  AT_FACTORY: { done: "bg-orange-500",  text: "text-orange-500",  line: "bg-orange-500" },
-  COMPLETED:  { done: "bg-emerald-500", text: "text-emerald-500", line: "bg-emerald-500" },
+  SCHEDULED: { done: "bg-blue-500", text: "text-blue-500", line: "bg-blue-500" },
+  LOADING: { done: "bg-amber-500", text: "text-amber-500", line: "bg-amber-500" },
+  IN_TRANSIT: { done: "bg-violet-500", text: "text-violet-500", line: "bg-violet-500" },
+  AT_FACTORY: { done: "bg-orange-500", text: "text-orange-500", line: "bg-orange-500" },
+  COMPLETED: { done: "bg-emerald-500", text: "text-emerald-500", line: "bg-emerald-500" },
   RECEIPT_SUBMITTED: { done: "bg-teal-500", text: "text-teal-500", line: "bg-teal-500" },
 };
 
@@ -128,11 +128,11 @@ function groupLogsByDate(logs: any[]) {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     let label = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(date);
     if (date.toDateString() === today.toDateString()) label = "Today";
     else if (date.toDateString() === yesterday.toDateString()) label = "Yesterday";
-    
+
     if (!groups[label]) groups[label] = [];
     groups[label].push(log);
   });
@@ -144,9 +144,50 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
   const [val, setVal] = useState(initialValue || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isDateTime = type === "datetime-local";
+  const [isDateTimeEditorOpen, setIsDateTimeEditorOpen] = useState(false);
+  const [datePart, setDatePart] = useState("");
+  const [timePart, setTimePart] = useState("");
+
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+
+  const toLocalDateTimeParts = (value: any) => {
+    if (!value) return { date: "", time: "" };
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return { date: "", time: "" };
+    return {
+      date: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+      time: `${pad2(d.getHours())}:${pad2(d.getMinutes())}`,
+    };
+  };
+
+  const toLocalDateTimeValue = (date: string, time: string) => {
+    if (!date) return "";
+    return `${date}T${time || "00:00"}`;
+  };
+
+  const formatDateTimePreview = (value: any) => {
+    if (!value) return "Not set";
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "Not set";
+    return new Intl.DateTimeFormat("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(d);
+  };
 
   useEffect(() => {
     setVal(initialValue || "");
+    if (isDateTime) {
+      const parts = toLocalDateTimeParts(initialValue);
+      setDatePart(parts.date);
+      setTimePart(parts.time);
+      setIsDateTimeEditorOpen(false);
+    }
   }, [initialValue]);
 
   // Allow consumer to pass a global callback to update parent state after API call
@@ -172,14 +213,14 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
       }
     }
     setError(null);
-    
+
     setLoading(true);
     try {
       await updateDelivery(id, { [fieldKey]: finalVal });
-      
+
       // Dispatch a custom event so the parent DeliveriesClient can update its local state immediately
-      window.dispatchEvent(new CustomEvent('delivery-updated', { 
-        detail: { id, fieldKey, finalVal } 
+      window.dispatchEvent(new CustomEvent('delivery-updated', {
+        detail: { id, fieldKey, finalVal }
       }));
 
       router.refresh();
@@ -190,6 +231,172 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
       setLoading(false);
     }
   };
+
+  const saveDateTime = async () => {
+    const finalVal = toLocalDateTimeValue(datePart, timePart);
+    if (finalVal === (initialValue || "")) {
+      setIsDateTimeEditorOpen(false);
+      return;
+    }
+
+    if (onBeforeChange && !onBeforeChange()) {
+      const parts = toLocalDateTimeParts(initialValue);
+      setDatePart(parts.date);
+      setTimePart(parts.time);
+      setIsDateTimeEditorOpen(false);
+      return;
+    }
+
+    if (validate) {
+      const errMsg = validate(finalVal);
+      if (errMsg) {
+        setError(errMsg);
+        return;
+      }
+    }
+
+    setError(null);
+    setLoading(true);
+    try {
+      await updateDelivery(id, { [fieldKey]: finalVal || null });
+
+      window.dispatchEvent(new CustomEvent("delivery-updated", {
+        detail: { id, fieldKey, finalVal }
+      }));
+
+      setVal(finalVal);
+      setIsDateTimeEditorOpen(false);
+      router.refresh();
+    } catch (e) {
+      console.error(e);
+      const parts = toLocalDateTimeParts(initialValue);
+      setDatePart(parts.date);
+      setTimePart(parts.time);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelDateTimeEdit = () => {
+    const parts = toLocalDateTimeParts(initialValue);
+    setDatePart(parts.date);
+    setTimePart(parts.time);
+    setError(null);
+    setIsDateTimeEditorOpen(false);
+  };
+
+  const setNow = () => {
+    const now = new Date();
+    setDatePart(`${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`);
+    setTimePart(`${pad2(now.getHours())}:${pad2(now.getMinutes())}`);
+  };
+
+  if (isDateTime) {
+    const preview = formatDateTimePreview(toLocalDateTimeValue(datePart, timePart) || initialValue);
+
+    return (
+      <div className="space-y-1.5">
+        {label && <span className="text-gray-500 block">{label}</span>}
+
+        <button
+          type="button"
+          disabled={loading || isReadonly}
+          onClick={() => !isReadonly && setIsDateTimeEditorOpen((s) => !s)}
+          className={cn(
+            "w-full mt-1 rounded-lg border px-2.5 py-2 text-left transition-colors",
+            "flex items-center justify-between gap-2 disabled:opacity-60",
+            "focus:outline-none focus:ring-2 focus:ring-emerald-500/40",
+            variant === "gray"
+              ? "bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white"
+              : "bg-white dark:bg-gray-900 border-transparent hover:border-gray-300 dark:hover:border-gray-700 text-gray-900 dark:text-white"
+          )}
+        >
+          <span className="flex items-center gap-2 min-w-0">
+            <Clock3 className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+            <span className="truncate text-sm font-medium">{preview}</span>
+          </span>
+          {!isReadonly && <Pencil className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
+        </button>
+
+        <AnimatePresence initial={false}>
+          {isDateTimeEditorOpen && !isReadonly && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16 }}
+              className="rounded-xl border border-cyan-200/60 dark:border-cyan-800/60 bg-gradient-to-b from-cyan-50/70 to-white dark:from-cyan-950/20 dark:to-gray-900 p-2.5 space-y-2"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-medium text-gray-500">Date</label>
+                  <input
+                    type="date"
+                    value={datePart}
+                    onChange={(e) => setDatePart(e.target.value)}
+                    className="w-full mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900 px-2 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-medium text-gray-500">Time</label>
+                  <input
+                    type="time"
+                    step="60"
+                    value={timePart}
+                    onChange={(e) => setTimePart(e.target.value)}
+                    className="w-full mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white/90 dark:bg-gray-900 px-2 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={setNow}
+                  className="px-2 py-1 rounded-md text-[11px] font-medium bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300"
+                >
+                  Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!datePart) return;
+                    const base = new Date(toLocalDateTimeValue(datePart, timePart || "00:00"));
+                    base.setMinutes(base.getMinutes() + 30);
+                    setDatePart(`${base.getFullYear()}-${pad2(base.getMonth() + 1)}-${pad2(base.getDate())}`);
+                    setTimePart(`${pad2(base.getHours())}:${pad2(base.getMinutes())}`);
+                  }}
+                  className="px-2 py-1 rounded-md text-[11px] font-medium bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                >
+                  +30 min
+                </button>
+              </div>
+
+              <div className="flex gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={cancelDateTimeEdit}
+                  className="flex-1 h-8 rounded-lg border border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-600 dark:text-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={saveDateTime}
+                  className="flex-1 h-8 rounded-lg bg-cyan-600 hover:bg-cyan-700 disabled:opacity-60 text-white text-xs font-semibold"
+                >
+                  {loading ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {error && <span className="text-[10px] text-red-500 mt-1 block">{error}</span>}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -203,12 +410,11 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
         disabled={loading || isReadonly}
         className={cn(
           "w-full mt-1 px-2 py-1 border rounded text-sm font-medium transition-colors focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:opacity-50",
-          variant === "gray" 
+          variant === "gray"
             ? "bg-gray-100 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white hover:border-gray-300 dark:hover:border-gray-600"
             : "bg-white dark:bg-gray-900 border-transparent hover:border-gray-300 dark:hover:border-gray-700 text-gray-900 dark:text-white"
         )}
       />
-      {type === "date" && <span className="text-[10px] text-gray-400 absolute bottom-1 right-2 pointer-events-none pb-1">{val ? "" : "Select Date"}</span>}
       {error && <span className="text-[10px] text-red-500 mt-1 block">{error}</span>}
     </div>
   );
@@ -388,9 +594,9 @@ function ReceiptPromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
-        
+
         <p className="text-xs text-gray-500">Provide a link or base64 representation of the submitted receipt to complete the workflow.</p>
-        
+
         <div>
           <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Receipt Image URL</label>
           <input
@@ -485,9 +691,9 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
   };
 
   // Sync from server when props change, and setup local optimistic listener
-  useEffect(() => { 
-    setDeliveries(initialDeliveries); 
-    
+  useEffect(() => {
+    setDeliveries(initialDeliveries);
+
     const handleLocalUpdate = async (e: any) => {
       const { id, fieldKey, finalVal } = e.detail;
       setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, [fieldKey]: finalVal } : d));
@@ -698,13 +904,13 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
-                      <EditableField 
-                         id={del.id} 
-                         fieldKey="vehicleNumber" 
-                         label="" 
-                         type="text" 
-                         initialValue={del.vehicleNumber} 
-                         validate={(v: string) => /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$/.test(v.toUpperCase()) ? null : "Invalid format (e.g. GJ01AB1234)"}
+                      <EditableField
+                        id={del.id}
+                        fieldKey="vehicleNumber"
+                        label=""
+                        type="text"
+                        initialValue={del.vehicleNumber}
+                        validate={(v: string) => /^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$/.test(v.toUpperCase()) ? null : "Invalid format (e.g. GJ01AB1234)"}
                       />
                     </div>
                     <span className={`badge text-[10px] shrink-0 ${getStatusColor(del.status)}`}>
@@ -863,7 +1069,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
 
                       {/* Details - Distinct Section Cards */}
                       <div className="space-y-3">
-                        
+
                         {/* Card 1: Logistics Details */}
                         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-3 border border-gray-100 dark:border-gray-800">
                           <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5 mb-2">
@@ -889,101 +1095,101 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                             <Calendar className="w-3.5 h-3.5 text-orange-500" /> Timeline
                           </h4>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                            <EditableField id={del.id} fieldKey="scheduledPickupTime" label="Scheduled Pickup" type="datetime-local" initialValue={del.scheduledPickupTime ? new Date(del.scheduledPickupTime).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
-                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected Delivery" type="datetime-local" initialValue={del.expDeliveryDt ? new Date(del.expDeliveryDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
-                            <EditableField id={del.id} fieldKey="actualDeliveryDt" label="Actual Delivery" type="datetime-local" initialValue={del.actualDeliveryDt ? new Date(del.actualDeliveryDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
-                            <EditableField id={del.id} fieldKey="unloadingDt" label="Factory Reached" type="datetime-local" initialValue={del.unloadingDt ? new Date(del.unloadingDt).toISOString().slice(0, 16) : ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="scheduledPickupTime" label="Scheduled Pickup" type="datetime-local" initialValue={del.scheduledPickupTime || ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="expDeliveryDt" label="Expected Delivery" type="datetime-local" initialValue={del.expDeliveryDt || ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="actualDeliveryDt" label="Actual Delivery" type="datetime-local" initialValue={del.actualDeliveryDt || ""} isReadonly={isCM} />
+                            <EditableField id={del.id} fieldKey="unloadingDt" label="Factory Reached" type="datetime-local" initialValue={del.unloadingDt || ""} isReadonly={isCM} />
                           </div>
                         </div>
 
                         {/* Card 3: Financial Summary (Receipt Ledger Pattern) */}
                         {!isCM && (
-                        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
-                          <div className="px-3 py-2.5 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                            <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
-                              <ScrollText className="w-3.5 h-3.5 text-emerald-500" /> Financial Summary
-                            </h4>
-                            <div className="w-28 text-right">
-                              <EditableField id={del.id} fieldKey="ratePerTon" label="" initialValue={del.ratePerTon} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
-                              <div className="text-[10px] text-gray-400 mt-0.5">Rate / Ton (₹)</div>
-                            </div>
-                          </div>
-                          
-                          <div className="p-3 space-y-2 text-xs">
-                            {/* Ideal Payment Row */}
-                            <div className="flex justify-between items-center py-1">
-                              <span className="text-gray-500 font-medium text-xs">Ideal Payment</span>
-                              <span className="font-semibold text-gray-900 dark:text-white text-sm">
-                                {formatCurrency(del.idealPayment)}
-                              </span>
-                            </div>
-                            
-                            {/* Deductions Ledger */}
-                            <div className="pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-2 pt-1">
-                              {/* Advance */}
-                              <div className="flex justify-between items-center">
-                                <span className="text-gray-500">Advance Paid</span>
-                                <div className="w-28 text-right flex items-center justify-end gap-1">
-                                  {del.advancePaid ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="advancePaid" label="" initialValue={del.advancePaid} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
-                                </div>
-                              </div>
-                              
-                              {/* Misc Amount */}
-                              <div className="flex justify-between items-center">
-                                <span className="text-gray-500">Misc Amount</span>
-                                <div className="w-28 text-right flex items-center justify-end gap-1">
-                                  {del.miscAmount ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="miscAmount" label="" initialValue={del.miscAmount} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
-                                </div>
-                              </div>
-                              
-                              {/* Waiting Charges */}
-                              <div className="flex justify-between items-center">
-                                <span className="text-gray-500">Waiting Charges</span>
-                                <div className="w-28 text-right flex items-center justify-end gap-1">
-                                  {del.waitingCharges ? <span className="text-red-500 font-bold">−</span> : null}
-                                  <EditableField id={del.id} fieldKey="waitingCharges" label="" initialValue={del.waitingCharges} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
-                                </div>
+                          <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-sm">
+                            <div className="px-3 py-2.5 bg-gray-50/80 dark:bg-gray-800/80 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                              <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
+                                <ScrollText className="w-3.5 h-3.5 text-emerald-500" /> Financial Summary
+                              </h4>
+                              <div className="w-28 text-right">
+                                <EditableField id={del.id} fieldKey="ratePerTon" label="" initialValue={del.ratePerTon} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
+                                <div className="text-[10px] text-gray-400 mt-0.5">Rate / Ton (₹)</div>
                               </div>
                             </div>
 
-                            {/* The "Bottom Line" Callout Block - Changes based on completion */}
-                            {(del.status === "COMPLETED" || del.status === "RECEIPT_SUBMITTED") ? (
-                              <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                            <div className="p-3 space-y-2 text-xs">
+                              {/* Ideal Payment Row */}
+                              <div className="flex justify-between items-center py-1">
+                                <span className="text-gray-500 font-medium text-xs">Ideal Payment</span>
+                                <span className="font-semibold text-gray-900 dark:text-white text-sm">
+                                  {formatCurrency(del.idealPayment)}
+                                </span>
+                              </div>
+
+                              {/* Deductions Ledger */}
+                              <div className="pl-3 border-l-2 border-gray-100 dark:border-gray-800 space-y-2 pt-1">
+                                {/* Advance */}
                                 <div className="flex justify-between items-center">
-                                  <span className="text-gray-600 dark:text-gray-300 font-medium">Balance Paid</span>
-                                  <div className="w-28 text-right">
-                                    <EditableField id={del.id} fieldKey="actuallyPaid" label="" initialValue={del.actuallyPaid} variant="gray" onBeforeChange={del.actuallyPaid ? () => window.confirm("Are you sure you want to change this?") : undefined} />
+                                  <span className="text-gray-500">Advance Paid</span>
+                                  <div className="w-28 text-right flex items-center justify-end gap-1">
+                                    {del.advancePaid ? <span className="text-red-500 font-bold">−</span> : null}
+                                    <EditableField id={del.id} fieldKey="advancePaid" label="" initialValue={del.advancePaid} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                   </div>
                                 </div>
-                                <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl">
-                                  <span className="font-bold text-indigo-800 dark:text-indigo-300 text-xs">Total Payment</span>
-                                  <span className="text-base font-bold text-indigo-800 dark:text-indigo-300">
-                                    {formatCurrency((del.actuallyPaid || 0) + (del.advancePaid || 0) + (del.miscAmount || 0) + (del.waitingCharges || 0))}
-                                  </span>
-                                </div>
-                                {/* Payment Completed Banner */}
-                                {del.actuallyPaid != null && del.actuallyPaid > 0 && (
-                                  <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-                                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Payment Completed</span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                                <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl">
-                                  <span className="font-bold text-emerald-800 dark:text-emerald-300 text-xs">Est. Balance Due</span>
-                                  <span className="text-base font-bold text-emerald-800 dark:text-emerald-300">
-                                    {formatCurrency((del.idealPayment || 0) - (del.advancePaid || 0) - (del.miscAmount || 0) - (del.waitingCharges || 0))}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
 
+                                {/* Misc Amount */}
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-500">Misc Amount</span>
+                                  <div className="w-28 text-right flex items-center justify-end gap-1">
+                                    {del.miscAmount ? <span className="text-red-500 font-bold">−</span> : null}
+                                    <EditableField id={del.id} fieldKey="miscAmount" label="" initialValue={del.miscAmount} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
+                                  </div>
+                                </div>
+
+                                {/* Waiting Charges */}
+                                <div className="flex justify-between items-center">
+                                  <span className="text-gray-500">Waiting Charges</span>
+                                  <div className="w-28 text-right flex items-center justify-end gap-1">
+                                    {del.waitingCharges ? <span className="text-red-500 font-bold">−</span> : null}
+                                    <EditableField id={del.id} fieldKey="waitingCharges" label="" initialValue={del.waitingCharges} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* The "Bottom Line" Callout Block - Changes based on completion */}
+                              {(del.status === "COMPLETED" || del.status === "RECEIPT_SUBMITTED") ? (
+                                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 space-y-2">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-gray-600 dark:text-gray-300 font-medium">Balance Paid</span>
+                                    <div className="w-28 text-right">
+                                      <EditableField id={del.id} fieldKey="actuallyPaid" label="" initialValue={del.actuallyPaid} variant="gray" onBeforeChange={del.actuallyPaid ? () => window.confirm("Are you sure you want to change this?") : undefined} />
+                                    </div>
+                                  </div>
+                                  <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl">
+                                    <span className="font-bold text-indigo-800 dark:text-indigo-300 text-xs">Total Payment</span>
+                                    <span className="text-base font-bold text-indigo-800 dark:text-indigo-300">
+                                      {formatCurrency((del.actuallyPaid || 0) + (del.advancePaid || 0) + (del.miscAmount || 0) + (del.waitingCharges || 0))}
+                                    </span>
+                                  </div>
+                                  {/* Payment Completed Banner */}
+                                  {del.actuallyPaid != null && del.actuallyPaid > 0 && (
+                                    <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                                      <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Payment Completed</span>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="mt-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                                  <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl">
+                                    <span className="font-bold text-emerald-800 dark:text-emerald-300 text-xs">Est. Balance Due</span>
+                                    <span className="text-base font-bold text-emerald-800 dark:text-emerald-300">
+                                      {formatCurrency((del.idealPayment || 0) - (del.advancePaid || 0) - (del.miscAmount || 0) - (del.waitingCharges || 0))}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+
+                            </div>
                           </div>
-                        </div>
                         )}
                       </div>
 
@@ -1054,12 +1260,12 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                             const groupKeys = Object.keys(groupLogsByDate(activityLogs[del.id]));
                                             const isLastDay = dateLabel === groupKeys[groupKeys.length - 1];
                                             const isLastLog = idx === logs.length - 1 && isLastDay;
-                                            
+
                                             let Icon = Truck;
                                             let bgColor = "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
                                             let ringColor = "ring-emerald-50 dark:ring-emerald-900/10";
                                             let actionText = "changed the delivery status";
-                                            
+
                                             if (log.action === "UPDATE") {
                                               Icon = Pencil;
                                               bgColor = "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
@@ -1076,14 +1282,14 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                               <div key={log.id} className="relative flex gap-2 pl-1">
                                                 {/* Connecting line */}
                                                 {!isLastLog && <div className="absolute top-5 bottom-[-16px] left-[17px] w-[2px] bg-gray-100 dark:bg-gray-800" />}
-                                                
+
                                                 {/* Node */}
                                                 <div className={`relative z-10 w-6 h-6 shrink-0 rounded-full flex items-center justify-center ring-3 bg-white dark:bg-gray-900 ${ringColor}`}>
                                                   <div className={`w-full h-full rounded-full flex items-center justify-center ${bgColor}`}>
                                                     <Icon className="w-3 h-3" />
                                                   </div>
                                                 </div>
-                                                
+
                                                 {/* Content */}
                                                 <div className="flex-1 pb-1 min-w-0">
                                                   <div className="flex justify-between items-start gap-1">
@@ -1094,7 +1300,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                                       {new Date(log.createdAt).toLocaleTimeString("en-US", { hour: 'numeric', minute: '2-digit' })}
                                                     </span>
                                                   </div>
-                                                  
+
                                                   {(log.oldValue || log.newValue) && (
                                                     <div className="mt-1.5 px-2 py-1.5 rounded-lg bg-gray-50/80 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-800 overflow-hidden w-full">
                                                       <LogDiff oldValue={log.oldValue} newValue={log.newValue} />
