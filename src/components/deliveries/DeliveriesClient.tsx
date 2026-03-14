@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
-  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2
+  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download
 } from "lucide-react";
 import { formatWeight, formatDate, formatCurrency, getStatusColor, cn } from "@/lib/utils";
-import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus } from "@/actions/deliveries";
+import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus, getDeliveriesExportData } from "@/actions/deliveries";
 import { getEntityActivityLogs } from "@/actions/admin";
 import { useRouter } from "next/navigation";
 import { ChatPopup } from "../shared/ChatPopup";
@@ -23,6 +23,93 @@ const STEP_COLORS: Record<string, { done: string; text: string; line: string }> 
   UNLOADING:  { done: "bg-orange-500",  text: "text-orange-500",  line: "bg-orange-500" },
   COMPLETED:  { done: "bg-emerald-500", text: "text-emerald-500", line: "bg-emerald-500" },
 };
+
+function escapeXml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function formatCell(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<Cell><Data ss:Type=\"Number\">${value}</Data></Cell>`;
+  }
+  if (typeof value === "boolean") {
+    return `<Cell><Data ss:Type=\"Boolean\">${value ? 1 : 0}</Data></Cell>`;
+  }
+  return `<Cell><Data ss:Type=\"String\">${escapeXml(value)}</Data></Cell>`;
+}
+
+function worksheetXml(name: string, headers: string[], rows: unknown[][]) {
+  const headerXml = `<Row>${headers.map((h) => `<Cell><Data ss:Type=\"String\">${escapeXml(h)}</Data></Cell>`).join("")}</Row>`;
+  const rowXml = rows
+    .map((row) => `<Row>${row.map((cell) => formatCell(cell)).join("")}</Row>`)
+    .join("");
+
+  return `<Worksheet ss:Name=\"${escapeXml(name)}\"><Table>${headerXml}${rowXml}</Table></Worksheet>`;
+}
+
+function downloadExcelXml(deliveryRows: unknown[][], logRows: unknown[][]) {
+  const workbook = `<?xml version=\"1.0\"?>
+<?mso-application progid=\"Excel.Sheet\"?>
+<Workbook xmlns=\"urn:schemas-microsoft-com:office:spreadsheet\"
+ xmlns:o=\"urn:schemas-microsoft-com:office:office\"
+ xmlns:x=\"urn:schemas-microsoft-com:office:excel\"
+ xmlns:ss=\"urn:schemas-microsoft-com:office:spreadsheet\"
+ xmlns:html=\"http://www.w3.org/TR/REC-html40\">
+  ${worksheetXml("Deliveries", [
+    "Delivery ID",
+    "Vehicle Number",
+    "Status",
+    "Factory",
+    "Delivery Location",
+    "Driver Name",
+    "Driver Contact",
+    "Transporter",
+    "Invoice No",
+    "Master Request ID",
+    "CM Name",
+    "Commodity",
+    "Est Weight",
+    "Final Weight",
+    "Rate/Ton",
+    "Ideal Payment",
+    "Advance Paid",
+    "Misc Amount",
+    "Waiting Charges",
+    "Actually Paid",
+    "Expected Delivery",
+    "Actual Delivery",
+    "Unloading Date",
+    "Created At",
+    "Updated At"
+  ], deliveryRows)}
+  ${worksheetXml("Delivery Logs", [
+    "Delivery ID",
+    "Vehicle Number",
+    "Action",
+    "Changed By",
+    "User Role",
+    "Changed At",
+    "Old Value",
+    "New Value"
+  ], logRows)}
+</Workbook>`;
+
+  const blob = new Blob([workbook], { type: "application/vnd.ms-excel" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const date = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `deliveries-export-${date}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 function groupLogsByDate(logs: any[]) {
   const groups: Record<string, any[]> = {};
@@ -265,6 +352,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
   const [activityLogs, setActivityLogs] = useState<Record<string, any[]>>({});
   const [showActivity, setShowActivity] = useState<string | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Helper: refresh activity logs for a delivery if the panel is open or logs are cached
   const refreshActivityLogs = async (entityId: string) => {
@@ -361,24 +449,91 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
     await refreshActivityLogs(entityId);
   };
 
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const payload = await getDeliveriesExportData({ status: statusFilter });
+      const byId = new Map(payload.deliveries.map((d: any) => [d.id, d]));
+
+      const deliveryRows = payload.deliveries.map((d: any) => [
+        d.id,
+        d.vehicleNumber || "",
+        d.status,
+        d.factory?.factoryName || "",
+        d.deliveryLoc || d.masterRequest?.deliveryLocation || "",
+        d.driverName || "",
+        d.driverContact || "",
+        d.transporterName || "",
+        d.invoiceNo || "",
+        d.masterReqId || d.masterRequest?.id || "",
+        d.masterRequest?.cm?.name || "",
+        d.masterRequest?.commodity || "",
+        d.masterRequest?.totalEstWeight ?? "",
+        d.totalWeightFinal ?? "",
+        d.ratePerTon ?? "",
+        d.idealPayment ?? "",
+        d.advancePaid ?? "",
+        d.miscAmount ?? "",
+        d.waitingCharges ?? "",
+        d.actuallyPaid ?? "",
+        d.expDeliveryDt ? new Date(d.expDeliveryDt).toISOString() : "",
+        d.actualDeliveryDt ? new Date(d.actualDeliveryDt).toISOString() : "",
+        d.unloadingDt ? new Date(d.unloadingDt).toISOString() : "",
+        d.createdAt ? new Date(d.createdAt).toISOString() : "",
+        d.updatedAt ? new Date(d.updatedAt).toISOString() : "",
+      ]);
+
+      const logRows = payload.logs.map((log: any) => {
+        const delivery = byId.get(log.entityId);
+        return [
+          log.entityId,
+          delivery?.vehicleNumber || "",
+          log.action,
+          log.user?.name || "",
+          log.user?.role || "",
+          log.createdAt ? new Date(log.createdAt).toISOString() : "",
+          log.oldValue ? JSON.stringify(log.oldValue) : "",
+          log.newValue ? JSON.stringify(log.newValue) : "",
+        ];
+      });
+
+      downloadExcelXml(deliveryRows, logRows);
+    } catch (error: any) {
+      alert(error?.message || "Failed to export deliveries");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Filter */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {statuses.map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={cn(
-              "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all",
-              statusFilter === s
-                ? "bg-emerald-500 text-white shadow-md"
-                : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-            )}
-          >
-            {s === "ALL" ? "All" : s.replace(/_/g, " ")}
-          </button>
-        ))}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {statuses.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all",
+                statusFilter === s
+                  ? "bg-emerald-500 text-white shadow-md"
+                  : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+              )}
+            >
+              {s === "ALL" ? "All" : s.replace(/_/g, " ")}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={handleExportExcel}
+          disabled={exporting}
+          className="btn-secondary text-xs px-3 py-1.5 self-start sm:self-auto"
+        >
+          <Download className="w-3.5 h-3.5" />
+          {exporting ? "Exporting..." : "Export to Excel"}
+        </button>
       </div>
 
       <p className="text-sm text-gray-500">{filtered.length} deliver{filtered.length !== 1 ? "ies" : "y"}</p>

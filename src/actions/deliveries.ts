@@ -53,6 +53,55 @@ export async function getDeliveries(filters?: { status?: string }) {
   });
 }
 
+// ─── Export Deliveries + Logs Data ─────────────────────
+
+export async function getDeliveriesExportData(filters?: { status?: string }) {
+  const session = await auth();
+  if (!session) throw new Error("Unauthorized");
+
+  const where: any = {};
+  if (filters?.status && filters.status !== "ALL") {
+    where.status = filters.status;
+  }
+
+  const deliveries = await prisma.deliveryDetail.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    include: {
+      masterRequest: {
+        select: {
+          id: true,
+          commodity: true,
+          totalEstWeight: true,
+          totalEstBags: true,
+          deliveryLocation: true,
+          pickupDate: true,
+          status: true,
+          cm: { select: { name: true, phone: true } },
+          _count: { select: { childPickups: true, messages: true } },
+        },
+      },
+      factory: { select: { factoryName: true, location: true } },
+      createdBy: { select: { name: true } },
+    },
+  });
+
+  const deliveryIds = deliveries.map((d) => d.id);
+
+  const logs = deliveryIds.length
+    ? await prisma.activityLog.findMany({
+        where: {
+          entityType: "DeliveryDetail",
+          entityId: { in: deliveryIds },
+        },
+        orderBy: { createdAt: "asc" },
+        include: { user: { select: { name: true, role: true } } },
+      })
+    : [];
+
+  return { deliveries, logs };
+}
+
 // ─── Get single delivery ────────────────────────────────
 
 export async function getDeliveryById(id: string) {
@@ -252,7 +301,7 @@ export async function updateDeliveryStatus(id: string, newStatus: DeliveryStatus
   if (newStatus === "COMPLETED" && !existing.actualDeliveryDt) {
     updateData.actualDeliveryDt = new Date();
   }
-  if (newStatus === "UNLOADING" && !existing.unloadingDt) {
+  if ((newStatus as string) === "UNLOADING" && !existing.unloadingDt) {
     updateData.unloadingDt = new Date();
   }
 
@@ -285,7 +334,7 @@ export async function updateDeliveryStatus(id: string, newStatus: DeliveryStatus
 
 // ─── Undo Delivery Status (go back one step) ────────────
 
-const DELIVERY_STEPS: DeliveryStatus[] = ["SCHEDULED", "LOADING", "IN_TRANSIT", "UNLOADING", "COMPLETED"];
+const DELIVERY_STEPS = ["SCHEDULED", "LOADING", "IN_TRANSIT", "UNLOADING", "COMPLETED"] as DeliveryStatus[];
 
 export async function undoDeliveryStatus(id: string) {
   const session = await auth();
@@ -306,7 +355,7 @@ export async function undoDeliveryStatus(id: string) {
     updateData.actualDeliveryDt = null;
     updateData.actuallyPaid = null;
   }
-  if (existing.status === "UNLOADING") {
+  if ((existing.status as string) === "UNLOADING") {
     updateData.unloadingDt = null;
   }
 
