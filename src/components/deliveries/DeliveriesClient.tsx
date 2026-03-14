@@ -508,7 +508,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
   return (
     <div className="space-y-4">
       {/* Filter */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-2">
         <div className="flex gap-2 overflow-x-auto pb-1">
           {statuses.map((s) => (
             <button
@@ -526,17 +526,21 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter 
           ))}
         </div>
 
-        <button
-          onClick={handleExportExcel}
-          disabled={exporting}
-          className="btn-secondary text-xs px-3 py-1.5 self-start sm:self-auto"
-        >
-          <Download className="w-3.5 h-3.5" />
-          {exporting ? "Exporting..." : "Export to Excel"}
-        </button>
-      </div>
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-gray-500">
+            {filtered.length} deliver{filtered.length !== 1 ? "ies" : "y"}
+          </p>
 
-      <p className="text-sm text-gray-500">{filtered.length} deliver{filtered.length !== 1 ? "ies" : "y"}</p>
+          <button
+            onClick={handleExportExcel}
+            disabled={exporting}
+            className="btn-secondary h-9 px-3 text-xs w-auto shrink-0"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {exporting ? "Exporting..." : "Export to Excel"}
+          </button>
+        </div>
+      </div>
 
       {/* Delivery cards */}
       <div className="space-y-3">
