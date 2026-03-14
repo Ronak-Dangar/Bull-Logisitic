@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
-  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download
+  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download, Phone
 } from "lucide-react";
 import { formatWeight, formatDate, formatCurrency, getStatusColor, cn } from "@/lib/utils";
 import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus, getDeliveriesExportData } from "@/actions/deliveries";
