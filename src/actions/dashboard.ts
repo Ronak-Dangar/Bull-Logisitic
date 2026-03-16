@@ -7,6 +7,9 @@ export async function getDashboardKPIs() {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
 
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
 
   const [totalRequests, inTransit, incompleteDeliveries, overToNext] = await Promise.all([
     prisma.masterRequest.count(),

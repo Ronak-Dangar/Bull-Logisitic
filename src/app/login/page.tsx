@@ -93,6 +93,7 @@ export default function LoginPage() {
                   className="input input-icon"
                   required
                   autoFocus
+                  suppressHydrationWarning
                 />
               </div>
             </div>
@@ -111,11 +112,13 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   className="input input-icon pr-10"
                   required
+                  suppressHydrationWarning
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                  suppressHydrationWarning
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -138,6 +141,7 @@ export default function LoginPage() {
               type="submit"
               disabled={loading}
               className="btn-primary w-full py-3 text-base disabled:opacity-50 disabled:cursor-not-allowed"
+              suppressHydrationWarning
             >
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

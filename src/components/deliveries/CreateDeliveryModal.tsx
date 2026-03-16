@@ -159,7 +159,7 @@ export function CreateDeliveryModal({ masterReqId, initialFactoryId, factories, 
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Expected Delivery</label>
-                <input type="date" value={form.expDeliveryDt} onChange={(e) => update("expDeliveryDt", e.target.value)} className="input w-full" />
+                <input type="datetime-local" value={form.expDeliveryDt} onChange={(e) => update("expDeliveryDt", e.target.value)} className="input w-full" />
               </div>
 
               <div>

@@ -17,18 +17,48 @@ const FIELD_LABELS: Record<string, string> = {
   transporterName: "Transporter",
   invoiceNo: "Invoice No.",
   totalBags: "Total Bags",
-  expDeliveryDt: "Exp. Delivery Date",
-  actualDeliveryDt: "Actual Delivery Date",
-  unloadingDt: "Unloading Date",
+  scheduledPickupTime: "Scheduled Pickup",
+  expDeliveryDt: "Expected Delivery",
+  actualDeliveryDt: "Actual Delivery",
+  unloadingDt: "Factory Reached",
 };
 
-function prettifyValue(val: any): string {
+const TIMELINE_DATE_FIELDS = new Set([
+  "scheduledPickupTime",
+  "expDeliveryDt",
+  "actualDeliveryDt",
+  "unloadingDt",
+]);
+
+function formatDateTimeValue(val: string): string {
+  const date = new Date(val);
+  if (isNaN(date.getTime())) return val;
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function prettifyValue(val: any, key?: string): string {
   if (val === null || val === undefined) return "—";
   if (typeof val === "number") return val.toLocaleString("en-IN");
   if (typeof val === "string") {
-    // ISO date
+    // Timeline fields always show date+time so minute-level changes are visible in logs.
+    if (TIMELINE_DATE_FIELDS.has(key || "") && /^\d{4}-\d{2}-\d{2}T/.test(val)) {
+      return formatDateTimeValue(val);
+    }
+    // Other ISO dates keep compact date-only formatting.
     if (/^\d{4}-\d{2}-\d{2}T/.test(val)) {
-      return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(val));
+      const date = new Date(val);
+      if (isNaN(date.getTime())) return val;
+      return new Intl.DateTimeFormat("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }).format(date);
     }
     // Enum-style
     return val.replace(/_/g, " ");
@@ -82,17 +112,17 @@ export function LogDiff({ oldValue, newValue }: LogDiffProps) {
                 <>
                   {before !== undefined && (
                     <span className="text-gray-400 line-through decoration-gray-300 dark:decoration-gray-600">
-                      {prettifyValue(before)}
+                      {prettifyValue(before, key)}
                     </span>
                   )}
                   {before !== undefined && <span className="text-gray-300 dark:text-gray-600">→</span>}
                   <span className="font-medium text-gray-900 dark:text-white">
-                    {after !== undefined ? prettifyValue(after) : "—"}
+                    {after !== undefined ? prettifyValue(after, key) : "—"}
                   </span>
                 </>
               ) : (
                 <span className="text-gray-700 dark:text-gray-300">
-                  {before !== undefined ? prettifyValue(before) : "—"}
+                  {before !== undefined ? prettifyValue(before, key) : "—"}
                 </span>
               )}
             </div>
