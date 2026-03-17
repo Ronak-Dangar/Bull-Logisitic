@@ -530,7 +530,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
   const advance = delivery.advancePaid || 0;
   const misc = delivery.miscAmount || 0;
   const waiting = delivery.waitingCharges || 0;
-  const balanceDue = ideal - advance - misc - waiting;
+  const balanceDue = ideal - advance - misc + waiting;
   const [balanceAmount, setBalanceAmount] = useState(Math.max(balanceDue, 0).toString());
   const [loading, setLoading] = useState(false);
 
@@ -567,7 +567,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
         <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
           <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
           <p className="text-xs text-amber-800 dark:text-amber-300 leading-relaxed">
-            Enter the final balance amount after deducting advance, misc charges, and waiting charges.
+            Enter the final balance amount after deducting advance and misc charges, and adding waiting charges.
           </p>
         </div>
 
@@ -586,8 +586,8 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
             <span className="font-medium text-red-500">−{formatCurrency(misc)}</span>
           </div>
           <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
-            <span className="text-gray-500">− Waiting Charges</span>
-            <span className="font-medium text-red-500">−{formatCurrency(waiting)}</span>
+            <span className="text-gray-500">+ Waiting Charges</span>
+            <span className="font-medium text-emerald-600">+{formatCurrency(waiting)}</span>
           </div>
           <div className="flex justify-between py-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3">
             <span className="font-semibold text-emerald-700 dark:text-emerald-400">Balance Due</span>
@@ -1243,7 +1243,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                   <div className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl">
                                     <span className="font-bold text-emerald-800 dark:text-emerald-300 text-xs">Est. Balance Due</span>
                                     <span className="text-base font-bold text-emerald-800 dark:text-emerald-300">
-                                      {formatCurrency((del.idealPayment || 0) - (del.advancePaid || 0) - (del.miscAmount || 0) - (del.waitingCharges || 0))}
+                                      {formatCurrency((del.idealPayment || 0) - (del.advancePaid || 0) - (del.miscAmount || 0) + (del.waitingCharges || 0))}
                                     </span>
                                   </div>
                                 </div>
