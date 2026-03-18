@@ -1109,7 +1109,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                         )}
                                         <span className="text-gray-900 dark:text-white truncate">
                                           {cp.pickupLocType === "BFH"
-                                            ? `BFH${cp.center?.centerName ? ` — ${cp.center.centerName}` : ""}`
+                                            ? `BFH${cp.villageName ? ` - ${cp.villageName}` : ""}`
                                             : cp.center?.centerName}
                                         </span>
                                       </div>
