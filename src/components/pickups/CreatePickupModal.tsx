@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { X, Plus, Trash2, MapPin, Home, Calendar, StickyNote } from "lucide-react";
+import { X, Plus, Trash2, MapPin, Home } from "lucide-react";
 import { createMasterRequest } from "@/actions/pickups";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 interface CreatePickupModalProps {
   centers: any[];
@@ -12,37 +13,55 @@ interface CreatePickupModalProps {
   onSuccess: () => void;
 }
 
+const INITIAL_DRAFT = {
+  commodity: "Castor",
+  factoryId: "",
+  pickupDate: "",
+  note: "",
+  showNote: false,
+  children: [
+    { pickupLocType: "CENTER", centerId: "", villageName: "", supervisorName: "", estWeight: 0, estBags: 0, stopSequence: 1 },
+  ],
+};
+
 export function CreatePickupModal({ centers, factories, onClose, onSuccess }: CreatePickupModalProps) {
   const [loading, setLoading] = useState(false);
-  const [commodity, setCommodity] = useState("Castor");
-  const [factoryId, setFactoryId] = useState("");
-  const [pickupDate, setPickupDate] = useState("");
-  const [note, setNote] = useState("");
-  const [showNote, setShowNote] = useState(false);
-  const [children, setChildren] = useState([
-    { pickupLocType: "CENTER", centerId: "", villageName: "", supervisorName: "", estWeight: 0, estBags: 0, stopSequence: 1 },
-  ]);
   const [showAddSupervisor, setShowAddSupervisor] = useState<Record<number, boolean>>({});
 
-  const addChild = () => {
-    setChildren([
-      ...children,
-      { pickupLocType: "CENTER", centerId: "", villageName: "", supervisorName: "", estWeight: 0, estBags: 0, stopSequence: children.length + 1 },
-    ]);
-  };
+  const [draft, setDraft, clearDraft, draftRestored] = useFormDraft("draft_pickup_create", INITIAL_DRAFT);
+  const { commodity, factoryId, pickupDate, note, showNote, children } = draft;
+  const [showDraftBanner, setShowDraftBanner] = useState(draftRestored);
 
-  const removeChild = (index: number) => {
-    setChildren(children.filter((_, i) => i !== index).map((c, i) => ({ ...c, stopSequence: i + 1 })));
-  };
+  const set = <K extends keyof typeof INITIAL_DRAFT>(field: K, value: (typeof INITIAL_DRAFT)[K]) =>
+    setDraft((d) => ({ ...d, [field]: value }));
+
+  const addChild = () =>
+    setDraft((d) => ({
+      ...d,
+      children: [
+        ...d.children,
+        { pickupLocType: "CENTER", centerId: "", villageName: "", supervisorName: "", estWeight: 0, estBags: 0, stopSequence: d.children.length + 1 },
+      ],
+    }));
+
+  const removeChild = (index: number) =>
+    setDraft((d) => ({
+      ...d,
+      children: d.children.filter((_, i) => i !== index).map((c, i) => ({ ...c, stopSequence: i + 1 })),
+    }));
 
   const updateChild = (index: number, field: string, value: any) => {
-    const updated = [...children];
-    (updated[index] as any)[field] = value;
-    // If switching from BFH to CENTER, clear villageName; vice versa clear centerId
-    if (field === "pickupLocType") {
-      if (value === "CENTER") updated[index].villageName = "";
-    }
-    setChildren(updated);
+    setDraft((d) => {
+      const updated = [...d.children];
+      (updated[index] as any)[field] = value;
+      if (field === "pickupLocType" && value === "CENTER") updated[index].villageName = "";
+      return { ...d, children: updated };
+    });
+  };
+
+  const handleCancel = () => {
+    clearDraft();
+    onClose();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -63,6 +82,7 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
           supervisorName: c.supervisorName || undefined,
         })),
       });
+      clearDraft();
       onSuccess();
     } catch (err: any) {
       console.error(err);
@@ -106,6 +126,26 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
           </button>
         </div>
 
+        {/* Draft restored banner */}
+        {showDraftBanner && (
+          <div className="mx-5 mt-4 flex items-center justify-between gap-2 text-xs px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400">
+            <span>Draft restored — your previous data was recovered.</span>
+            <button
+              type="button"
+              onClick={() => {
+                clearDraft();
+                setDraft(INITIAL_DRAFT);
+                setShowAddSupervisor({});
+                setShowDraftBanner(false);
+              }}
+              className="shrink-0 p-0.5 hover:opacity-70 transition-opacity"
+              title="Discard draft"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex-1 flex flex-col relative">
           <div className="p-5 space-y-6 flex-1">
             {/* Step 1: Basic Info */}
@@ -117,15 +157,15 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Pickup Date *</label>
-                  <input type="date" value={pickupDate} onChange={(e) => setPickupDate(e.target.value)} className="input bg-white dark:bg-gray-800" required />
+                  <input type="date" value={pickupDate} onChange={(e) => set("pickupDate", e.target.value)} className="input bg-white dark:bg-gray-800" required />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Commodity</label>
-                  <input value={commodity} onChange={(e) => setCommodity(e.target.value)} className="input bg-white dark:bg-gray-800" required />
+                  <input value={commodity} onChange={(e) => set("commodity", e.target.value)} className="input bg-white dark:bg-gray-800" required />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Deliver to Factory</label>
-                  <select value={factoryId} onChange={(e) => setFactoryId(e.target.value)} className="input bg-white dark:bg-gray-800">
+                  <select value={factoryId} onChange={(e) => set("factoryId", e.target.value)} className="input bg-white dark:bg-gray-800">
                     <option value="">Select Factory Later...</option>
                     {factories.map((f: any) => (
                       <option key={f.id} value={f.id}>{f.factoryName} {f.location ? `— ${f.location}` : ""}</option>
@@ -161,14 +201,14 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
 
                     {/* Row 1: Segmented Control */}
                     <div className="flex bg-gray-100 dark:bg-gray-900/50 overflow-hidden rounded-lg p-1">
-                      <button 
+                      <button
                         type="button"
                         onClick={() => updateChild(index, "pickupLocType", "CENTER")}
                         className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${child.pickupLocType === "CENTER" ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"}`}
                       >
                          <Home className="w-3.5 h-3.5" /> Center
                       </button>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => updateChild(index, "pickupLocType", "BFH")}
                         className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold rounded-md transition-all duration-200 ${child.pickupLocType === "BFH" ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-[0_1px_3px_rgba(0,0,0,0.1)]" : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"}`}
@@ -280,7 +320,7 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
               {!showNote && !note ? (
                 <button
                   type="button"
-                  onClick={() => setShowNote(true)}
+                  onClick={() => set("showNote", true)}
                   className="text-emerald-600 dark:text-emerald-400 text-sm font-medium flex items-center gap-1.5 hover:underline px-3 py-2 -ml-3 rounded-lg transition-colors hover:bg-emerald-50 dark:hover:bg-emerald-900/10 w-fit"
                 >
                   <Plus className="w-4 h-4" /> Add Note (optional)
@@ -289,7 +329,7 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
                 <div className="relative">
                   <textarea
                     value={note}
-                    onChange={(e) => setNote(e.target.value)}
+                    onChange={(e) => set("note", e.target.value)}
                     placeholder="Any special instructions..."
                     rows={2}
                     className="input bg-white dark:bg-gray-800 pr-10"
@@ -299,8 +339,8 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
                   <button
                     type="button"
                     onClick={() => {
-                      setNote("");
-                      setShowNote(false);
+                      set("note", "");
+                      set("showNote", false);
                     }}
                     className="absolute right-3 top-3 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 bg-gray-50 dark:bg-gray-900 rounded-md transition-colors"
                   >
@@ -316,7 +356,7 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
 
           {/* Sticky Footer */}
           <div className="sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-4 z-30 flex gap-3 pb-safe shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1 py-3 text-sm font-semibold">Cancel</button>
+            <button type="button" onClick={handleCancel} className="btn-secondary flex-1 py-3 text-sm font-semibold">Cancel</button>
             <button type="submit" disabled={loading} className="btn-primary flex-1 py-3 text-sm font-semibold shadow-md active:scale-[0.98] transition-all">
               {loading ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />

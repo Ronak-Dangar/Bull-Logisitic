@@ -1297,6 +1297,40 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                           </div>
                         )}
 
+                        {/* Voucher download buttons */}
+                        {(del.advancePaid || del.actuallyPaid) && (
+                          <div className="flex gap-2">
+                            {del.advancePaid ? (
+                              <a
+                                href={`/voucher/${del.id}/advance`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 min-h-9 rounded-lg border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[11px] font-semibold px-2.5 py-1.5 flex items-center justify-center gap-1.5 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                              >
+                                <FileText className="w-3 h-3 shrink-0" />
+                                <span className="text-center leading-tight">
+                                  <span className="block">Advance</span>
+                                  <span className="block">Voucher</span>
+                                </span>
+                              </a>
+                            ) : null}
+                            {del.actuallyPaid ? (
+                              <a
+                                href={`/voucher/${del.id}/final`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 min-h-9 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[11px] font-semibold px-2.5 py-1.5 flex items-center justify-center gap-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                              >
+                                <FileText className="w-3 h-3 shrink-0" />
+                                <span className="text-center leading-tight">
+                                  <span className="block">Final</span>
+                                  <span className="block">Voucher</span>
+                                </span>
+                              </a>
+                            ) : null}
+                          </div>
+                        )}
+
                         {/* Activity logs toggle */}
                         <button
                           onClick={() => toggleActivity(del.id)}
