@@ -201,7 +201,7 @@ export async function createMasterRequest(data: {
 
 export async function updateChildPickup(
   childId: string,
-  data: { estWeight?: number; estBags?: number; actualWeight?: number; actualBags?: number; supervisorName?: string; loadingStatus?: string }
+  data: { estWeight?: number; estBags?: number; actualWeight?: number; actualBags?: number; supervisorName?: string; loadingStatus?: string; centerId?: string; villageName?: string }
 ) {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
@@ -256,6 +256,8 @@ export async function updateChildPickup(
       ...(data.actualBags !== undefined && { actualBags: data.actualBags }),
       ...(data.supervisorName !== undefined && { supervisorName: data.supervisorName }),
       ...(data.loadingStatus !== undefined && { loadingStatus: data.loadingStatus as any }),
+      ...(data.centerId !== undefined && { centerId: data.centerId }),
+      ...(data.villageName !== undefined && { villageName: data.villageName }),
     },
   });
 
@@ -515,6 +517,145 @@ export async function addChildPickup(data: {
   return { success: true };
 }
 
+// ─── Remove Child Pickup ─────────────────────────────────
+
+export async function removeChildPickup(childId: string) {
+  const session = await auth();
+  if (!session) throw new Error("Unauthorized");
+  const user = session.user as any;
+
+  const existing = await prisma.childPickup.findUnique({
+    where: { id: childId },
+    include: {
+      parent: {
+        include: { childPickups: { select: { id: true } } },
+      },
+    },
+  });
+  if (!existing) throw new Error("Child pickup not found");
+
+  if (existing.parent.childPickups.length <= 1) {
+    throw new Error("Cannot remove the last stop from a pickup request");
+  }
+
+  const isCM = user.role === "CM";
+  const parentStatus = existing.parent.status as RequestStatus;
+
+  if (isCM && requiresUrgentApproval(parentStatus)) {
+    const approval = await prisma.urgentApproval.create({
+      data: {
+        masterReqId: existing.parentId,
+        requestedById: user.id,
+        changeType: "DELETE_STOP",
+        pendingData: {
+          type: "removeChildPickup",
+          childId,
+          snapshot: {
+            pickupLocType: existing.pickupLocType,
+            centerId: existing.centerId,
+            villageName: existing.villageName,
+            estWeight: existing.estWeight,
+            estBags: existing.estBags,
+            stopSequence: existing.stopSequence,
+          },
+        } as any,
+      },
+    });
+
+    sendPushToRoles(["LM", "ADMIN"], {
+      title: "🚨 URGENT: Approval Required",
+      body: `${user.name} wants to remove a stop from an approved pickup — review required!`,
+      url: `/pickups`,
+    }, user.id).catch(console.error);
+
+    return { urgentApproval: true, approvalId: approval.id };
+  }
+
+  // Normal delete
+  await prisma.childPickup.delete({ where: { id: childId } });
+
+  // Recalculate totals
+  const masterWithChildren = await prisma.masterRequest.findUnique({
+    where: { id: existing.parentId },
+    include: { childPickups: { select: { actualWeight: true, estWeight: true, actualBags: true, estBags: true } } },
+  });
+  if (masterWithChildren) {
+    const finalWeight = masterWithChildren.childPickups.reduce((sum: number, c: any) => sum + (c.actualWeight || c.estWeight || 0), 0);
+    const finalBags = masterWithChildren.childPickups.reduce((sum: number, c: any) => sum + (c.actualBags || c.estBags || 0), 0);
+    await prisma.masterRequest.update({ where: { id: existing.parentId }, data: { totalEstWeight: finalWeight, totalEstBags: finalBags } });
+    const delivery = await prisma.deliveryDetail.findUnique({ where: { masterReqId: existing.parentId } });
+    if (delivery) {
+      const totalWeightInTons = finalWeight ? finalWeight / 1000 : 0;
+      const idealPayment = delivery.ratePerTon ? delivery.ratePerTon * totalWeightInTons : delivery.idealPayment;
+      await prisma.deliveryDetail.update({ where: { id: delivery.id }, data: { totalWeightFinal: finalWeight, totalBags: finalBags, idealPayment } });
+    }
+  }
+
+  await logActivity(user.id, "DELETE", "ChildPickup", childId, { stopSequence: existing.stopSequence, estWeight: existing.estWeight }, null);
+  return { success: true };
+}
+
+// ─── Update Master Request Factory (Drop Location) ───────
+
+export async function updateMasterRequestFactory(masterReqId: string, newFactoryId: string) {
+  const session = await auth();
+  if (!session) throw new Error("Unauthorized");
+  const user = session.user as any;
+
+  const existing = await prisma.masterRequest.findUnique({
+    where: { id: masterReqId },
+    include: { factory: { select: { factoryName: true } } },
+  });
+  if (!existing) throw new Error("Request not found");
+
+  const newFactory = await prisma.factory.findUnique({ where: { id: newFactoryId } });
+  if (!newFactory) throw new Error("Factory not found");
+
+  const isCM = user.role === "CM";
+  const status = existing.status as RequestStatus;
+
+  if (isCM && requiresUrgentApproval(status)) {
+    const approval = await prisma.urgentApproval.create({
+      data: {
+        masterReqId,
+        requestedById: user.id,
+        changeType: "UPDATE_FACTORY",
+        pendingData: {
+          type: "updateMasterRequestFactory",
+          newFactoryId,
+          newFactoryName: newFactory.factoryName,
+          oldFactoryId: existing.factoryId,
+          oldFactoryName: existing.factory?.factoryName,
+        } as any,
+      },
+    });
+
+    sendPushToRoles(["LM", "ADMIN"], {
+      title: "🚨 URGENT: Approval Required",
+      body: `${user.name} wants to change the drop location on an approved pickup — review required!`,
+      url: `/pickups`,
+    }, user.id).catch(console.error);
+
+    return { urgentApproval: true, approvalId: approval.id };
+  }
+
+  // Normal update
+  await prisma.masterRequest.update({
+    where: { id: masterReqId },
+    data: { factoryId: newFactoryId, deliveryLocation: newFactory.factoryName },
+  });
+  const delivery = await prisma.deliveryDetail.findUnique({ where: { masterReqId } });
+  if (delivery) {
+    await prisma.deliveryDetail.update({ where: { id: delivery.id }, data: { deliveryLoc: newFactory.factoryName } });
+  }
+
+  await logActivity(user.id, "UPDATE", "MasterRequest", masterReqId,
+    { factoryId: existing.factoryId, deliveryLocation: existing.factory?.factoryName },
+    { factoryId: newFactoryId, deliveryLocation: newFactory.factoryName }
+  );
+  return { success: true };
+}
+
 // ─── Get Pending Urgent Approvals ────────────────────────
 
 export async function getPendingUrgentApprovals() {
@@ -625,6 +766,8 @@ export async function resolveUrgentApproval(approvalId: string, approve: boolean
           ...(changes.actualBags !== undefined && { actualBags: changes.actualBags }),
           ...(changes.supervisorName !== undefined && { supervisorName: changes.supervisorName }),
           ...(changes.loadingStatus !== undefined && { loadingStatus: changes.loadingStatus as any }),
+          ...(changes.centerId !== undefined && { centerId: changes.centerId }),
+          ...(changes.villageName !== undefined && { villageName: changes.villageName }),
         },
       });
 
@@ -659,6 +802,37 @@ export async function resolveUrgentApproval(approvalId: string, approve: boolean
             data: { totalWeightFinal: finalWeight, totalBags: finalBags, idealPayment },
           });
         }
+      }
+    } else if (pendingData.type === "removeChildPickup") {
+      const { childId } = pendingData;
+      const child = await prisma.childPickup.findUnique({ where: { id: childId } });
+      if (child) {
+        await prisma.childPickup.delete({ where: { id: childId } });
+        const masterWithChildren = await prisma.masterRequest.findUnique({
+          where: { id: approval.masterReqId },
+          include: { childPickups: { select: { actualWeight: true, estWeight: true, actualBags: true, estBags: true } } },
+        });
+        if (masterWithChildren) {
+          const finalWeight = masterWithChildren.childPickups.reduce((sum: number, c: any) => sum + (c.actualWeight || c.estWeight || 0), 0);
+          const finalBags = masterWithChildren.childPickups.reduce((sum: number, c: any) => sum + (c.actualBags || c.estBags || 0), 0);
+          await prisma.masterRequest.update({ where: { id: approval.masterReqId }, data: { totalEstWeight: finalWeight, totalEstBags: finalBags } });
+          const delivery = await prisma.deliveryDetail.findUnique({ where: { masterReqId: approval.masterReqId } });
+          if (delivery) {
+            const totalWeightInTons = finalWeight ? finalWeight / 1000 : 0;
+            const idealPayment = delivery.ratePerTon ? delivery.ratePerTon * totalWeightInTons : delivery.idealPayment;
+            await prisma.deliveryDetail.update({ where: { id: delivery.id }, data: { totalWeightFinal: finalWeight, totalBags: finalBags, idealPayment } });
+          }
+        }
+      }
+    } else if (pendingData.type === "updateMasterRequestFactory") {
+      const { newFactoryId, newFactoryName } = pendingData;
+      await prisma.masterRequest.update({
+        where: { id: approval.masterReqId },
+        data: { factoryId: newFactoryId, deliveryLocation: newFactoryName },
+      });
+      const delivery = await prisma.deliveryDetail.findUnique({ where: { masterReqId: approval.masterReqId } });
+      if (delivery) {
+        await prisma.deliveryDetail.update({ where: { id: delivery.id }, data: { deliveryLoc: newFactoryName } });
       }
     }
 

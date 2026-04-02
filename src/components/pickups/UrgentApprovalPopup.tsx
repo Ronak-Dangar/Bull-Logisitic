@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertTriangle, Check, X, MapPin, Home, Clock, User2 } from "lucide-react";
+import { AlertTriangle, Check, X, MapPin, Home, Clock, User2, Trash2, Factory } from "lucide-react";
 import { resolveUrgentApproval } from "@/actions/pickups";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/utils";
@@ -67,6 +67,8 @@ function ChangeDetails({ changeType, pendingData }: { changeType: string; pendin
       actualBags: "Actual Bags",
       supervisorName: "Supervisor Name",
       loadingStatus: "Loading Status",
+      villageName: "Village Name",
+      centerId: "Center",
     };
     return (
       <div className="space-y-2">
@@ -80,6 +82,50 @@ function ChangeDetails({ changeType, pendingData }: { changeType: string; pendin
               <span className="font-semibold text-gray-900 dark:text-white">{String(value)}</span>
             </div>
           ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (changeType === "DELETE_STOP") {
+    const snap = pendingData.snapshot;
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-red-700 dark:text-red-300 uppercase tracking-wide text-xs">
+          Remove Pickup Stop
+        </p>
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800/50">
+          <div className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center flex-shrink-0">
+            <Trash2 className="w-4 h-4 text-red-500" />
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900 dark:text-white text-sm">
+              Stop #{snap?.stopSequence} — {snap?.pickupLocType === "BFH" ? `BFH / ${snap?.villageName || "village"}` : "Collection Center"}
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Est. Weight: <strong>{snap?.estWeight} kg</strong> · Est. Bags: <strong>{snap?.estBags || 0}</strong>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (changeType === "UPDATE_FACTORY") {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm font-semibold text-orange-700 dark:text-orange-300 uppercase tracking-wide text-xs">
+          Change Drop Location
+        </p>
+        <div className="rounded-xl bg-white dark:bg-gray-800 border border-orange-200 dark:border-orange-800/50 overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-2.5 text-sm border-b border-orange-100 dark:border-orange-900/30">
+            <span className="text-gray-500">From</span>
+            <span className="font-semibold text-gray-500 line-through">{pendingData.oldFactoryName || "—"}</span>
+          </div>
+          <div className="flex items-center justify-between px-3 py-2.5 text-sm">
+            <span className="text-gray-500 flex items-center gap-1"><Factory className="w-3.5 h-3.5" /> To</span>
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">{pendingData.newFactoryName}</span>
+          </div>
         </div>
       </div>
     );

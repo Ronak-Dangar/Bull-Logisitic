@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Search, ChevronDown, MapPin, User2, Weight,
-  Calendar, Package, Truck, CheckCircle, MessageSquare, Home, StickyNote, ScrollText, ChevronRight, AlertTriangle, Trash2
+  Calendar, Package, Truck, CheckCircle, MessageSquare, Home, StickyNote, ScrollText, ChevronRight, AlertTriangle, Trash2, Pencil, X, Check, Factory
 } from "lucide-react";
 import { formatWeight, formatDate, getStatusColor, cn, timeSince } from "@/lib/utils";
 import { CreatePickupModal } from "./CreatePickupModal";
@@ -12,7 +12,7 @@ import { CreateDeliveryModal } from "../deliveries/CreateDeliveryModal";
 import { AddStopModal } from "./AddStopModal";
 import { ChatPopup } from "../shared/ChatPopup";
 import { UrgentApprovalPopup } from "./UrgentApprovalPopup";
-import { updateRequestStatus, updateChildPickup } from "@/actions/pickups";
+import { updateRequestStatus, updateChildPickup, removeChildPickup, updateMasterRequestFactory } from "@/actions/pickups";
 import { getEntityActivityLogs } from "@/actions/admin";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -96,6 +96,172 @@ function getPickupPointLabel(stop: any) {
     return stop.villageName || stop.center?.centerName || "BFH";
   }
   return stop.center?.centerName || "Center";
+}
+
+function DeleteStopButton({ childId, parentStatus, isCM }: { childId: string; parentStatus: string; isCM: boolean }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirm("Remove this pickup stop?")) return;
+    setLoading(true);
+    try {
+      const result = await removeChildPickup(childId);
+      if ((result as any)?.urgentApproval) {
+        alert("Removal submitted for LM approval.");
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleDelete}
+      disabled={loading}
+      title="Remove this stop"
+      className="text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-colors disabled:opacity-50"
+    >
+      {loading ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin inline-block" /> : <Trash2 className="w-3 h-3" />}
+    </button>
+  );
+}
+
+function EditableLocation({ child, centers, canEdit }: { child: any; centers: any[]; canEdit: boolean }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(child.pickupLocType === "BFH" ? (child.villageName || "") : (child.centerId || ""));
+  const [loading, setLoading] = useState(false);
+
+  if (!canEdit) return null;
+
+  const handleSave = async () => {
+    if (!val) return;
+    setLoading(true);
+    try {
+      const changes = child.pickupLocType === "BFH" ? { villageName: val } : { centerId: val };
+      const result = await updateChildPickup(child.id, changes);
+      if ((result as any)?.urgentApproval) {
+        alert("Change submitted for LM approval.");
+      }
+      setEditing(false);
+      router.refresh();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors mt-0.5"
+        title="Edit location"
+      >
+        <Pencil className="w-3 h-3" />
+        <span>Edit</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1 mt-1">
+      {child.pickupLocType === "BFH" ? (
+        <input
+          autoFocus
+          type="text"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          placeholder="Village name"
+          className="w-28 px-2 py-1 text-xs bg-white dark:bg-gray-900 border border-emerald-400 rounded-md focus:outline-none"
+        />
+      ) : (
+        <select
+          autoFocus
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          className="w-32 px-2 py-1 text-xs bg-white dark:bg-gray-900 border border-emerald-400 rounded-md focus:outline-none"
+        >
+          <option value="">Select center</option>
+          {centers.map((c: any) => (
+            <option key={c.id} value={c.id}>{c.centerName}</option>
+          ))}
+        </select>
+      )}
+      <button onClick={handleSave} disabled={loading} className="text-emerald-500 hover:text-emerald-600 disabled:opacity-50">
+        <Check className="w-4 h-4" />
+      </button>
+      <button onClick={() => { setEditing(false); setVal(child.pickupLocType === "BFH" ? (child.villageName || "") : (child.centerId || "")); }} className="text-gray-400 hover:text-red-500">
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+function EditableFactory({ req, factories, canEdit, isCM }: { req: any; factories: any[]; canEdit: boolean; isCM: boolean }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(req.factoryId || "");
+  const [loading, setLoading] = useState(false);
+
+  const displayName = req.factory?.factoryName || req.deliveryLocation || "—";
+
+  const handleSave = async () => {
+    if (!val || val === req.factoryId) { setEditing(false); return; }
+    setLoading(true);
+    try {
+      const result = await updateMasterRequestFactory(req.id, val);
+      if ((result as any)?.urgentApproval) {
+        alert("Drop location change submitted for LM approval.");
+      }
+      setEditing(false);
+      router.refresh();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <span className="flex items-center gap-1">
+        {displayName}
+        {canEdit && (
+          <button onClick={() => setEditing(true)} className="text-gray-400 hover:text-emerald-500 transition-colors ml-1" title="Change factory">
+            <Pencil className="w-3 h-3" />
+          </button>
+        )}
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1">
+      <select
+        autoFocus
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        className="text-sm px-2 py-0.5 bg-white dark:bg-gray-900 border border-emerald-400 rounded-md focus:outline-none"
+      >
+        <option value="">Select factory</option>
+        {factories.map((f: any) => (
+          <option key={f.id} value={f.id}>{f.factoryName}</option>
+        ))}
+      </select>
+      <button onClick={handleSave} disabled={loading} className="text-emerald-500 hover:text-emerald-600 disabled:opacity-50">
+        <Check className="w-4 h-4" />
+      </button>
+      <button onClick={() => { setEditing(false); setVal(req.factoryId || ""); }} className="text-gray-400 hover:text-red-500">
+        <X className="w-4 h-4" />
+      </button>
+    </span>
+  );
 }
 
 function getPickupRouteLabel(req: any) {
@@ -339,7 +505,10 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
                     <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-800 pt-3 space-y-3">
                       {/* Meta info */}
                       <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
-                        <span><strong>Factory:</strong> {req.factory?.factoryName || req.deliveryLocation}</span>
+                        <span className="flex items-center gap-1.5">
+                          <strong>Factory:</strong>
+                          <EditableFactory req={req} factories={factories} canEdit={req.status === "SUBMITTED" || req.status === "FINDING_VEHICLE" || req.status === "PROCESSED" || req.status === "OVER_TO_NEXT"} isCM={isCM} />
+                        </span>
                         {req.approvedBy && (
                           <span><strong>Approved by:</strong> {req.approvedBy.name} on {formatDate(req.approvedAt)}</span>
                         )}
@@ -475,7 +644,14 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
                           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                             {req.childPickups?.map((child: any) => (
                               <tr key={child.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
-                                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">{child.stopSequence}</td>
+                                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span>{child.stopSequence}</span>
+                                    {(req.status === "SUBMITTED" || req.status === "FINDING_VEHICLE" || req.status === "PROCESSED" || req.status === "OVER_TO_NEXT") && req.childPickups.length > 1 && (
+                                      <DeleteStopButton childId={child.id} parentStatus={req.status} isCM={isCM} />
+                                    )}
+                                  </div>
+                                </td>
                                 <td className="px-3 py-2.5">
                                   <div className="flex items-center gap-2">
                                     {child.pickupLocType === "BFH" ? (
@@ -493,6 +669,13 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
                                       </p>
                                       {child.villageName && (
                                         <p className="text-xs text-gray-500">{child.villageName}</p>
+                                      )}
+                                      {(req.status === "SUBMITTED" || req.status === "FINDING_VEHICLE" || req.status === "PROCESSED" || req.status === "OVER_TO_NEXT") && (
+                                        <EditableLocation
+                                          child={child}
+                                          centers={centers}
+                                          canEdit={true}
+                                        />
                                       )}
                                     </div>
                                   </div>
