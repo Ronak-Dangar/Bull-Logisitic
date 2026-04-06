@@ -33,18 +33,22 @@ export function useFormDraft<T>(
   // Skip the first effect run so we don't write the initial value back
   // to localStorage when there was no prior draft.
   const skipFirst = useRef(true);
+  // Prevent re-writing to localStorage after clearDraft() is called
+  const cleared = useRef(false);
 
   useEffect(() => {
     if (skipFirst.current) {
       skipFirst.current = false;
       return;
     }
+    if (cleared.current) return;
     try {
       localStorage.setItem(key, JSON.stringify(state));
     } catch {}
   }, [key, state]);
 
   const clearDraft = () => {
+    cleared.current = true;
     try {
       localStorage.removeItem(key);
     } catch {}
