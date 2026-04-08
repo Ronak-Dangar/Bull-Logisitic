@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 const COMPANY_NAME = "21 Hectares Agrotech Private Limited";
 
@@ -72,10 +72,26 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
   const [printing, setPrinting] = useState(false);
   const [rcm, setRcm] = useState(true);
   const [payTo, setPayTo] = useState<"transporter" | "driver">("transporter");
+  const voucherRef = useRef<HTMLDivElement>(null);
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
+    if (!voucherRef.current) return;
     setPrinting(true);
-    setTimeout(() => { window.print(); setPrinting(false); }, 100);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      await html2pdf()
+        .set({
+          margin: 0,
+          filename: `${voucherNo}.pdf`,
+          image: { type: "jpeg", quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        })
+        .from(voucherRef.current)
+        .save();
+    } finally {
+      setPrinting(false);
+    }
   };
 
   const voucherNo = getVoucherNo(delivery.id, type);
@@ -111,23 +127,25 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
         .top-bar {
           position: sticky; top: 0; z-index: 50;
           background: #111;
-          padding: 11px 16px;
-          display: flex; align-items: center; gap: 10px;
+          padding: 10px 12px 8px;
+          display: flex; flex-direction: column; gap: 8px;
           box-shadow: 0 1px 4px rgba(0,0,0,0.3);
         }
-        .top-bar-title { color: #fff; font-size: 14px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .top-bar-row1 { display: flex; align-items: center; gap: 8px; }
+        .top-bar-row2 { display: flex; align-items: center; gap: 8px; }
+        .top-bar-title { color: #fff; font-size: 13px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .top-bar-sub { color: #999; font-size: 10px; margin-top: 1px; }
         .btn-back {
           background: transparent; color: #ccc; border: 1px solid #444;
-          border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 600;
+          border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 600;
           cursor: pointer; white-space: nowrap; flex-shrink: 0;
           -webkit-tap-highlight-color: transparent;
         }
         .btn-back:active { background: #222; }
         .btn-print {
           background: #fff; color: #111; border: none;
-          border-radius: 6px; padding: 8px 14px; font-size: 12px; font-weight: 700;
-          cursor: pointer; display: flex; align-items: center; gap: 6px;
+          border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 700;
+          cursor: pointer; display: flex; align-items: center; gap: 5px;
           white-space: nowrap; flex-shrink: 0;
           -webkit-tap-highlight-color: transparent;
         }
@@ -135,8 +153,9 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
         .rcm-toggle {
           display: flex; align-items: center; gap: 6px;
           background: rgba(255,255,255,0.08); border: 1px solid #444;
-          border-radius: 6px; padding: 6px 10px; cursor: pointer;
-          flex-shrink: 0; -webkit-tap-highlight-color: transparent;
+          border-radius: 6px; padding: 5px 10px; cursor: pointer;
+          flex: 1; justify-content: center;
+          -webkit-tap-highlight-color: transparent;
         }
         .rcm-toggle-label { font-size: 11px; color: #aaa; white-space: nowrap; }
         .rcm-chip {
@@ -284,31 +303,37 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
 
       {/* Top bar */}
       <div className="top-bar">
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div className="top-bar-title">{isAdvance ? "Advance" : "Final"} Payment Voucher</div>
-          <div className="top-bar-sub">{voucherNo}</div>
+        {/* Row 1: Back | Title | Download */}
+        <div className="top-bar-row1">
+          <button className="btn-back" onClick={() => window.history.back()}>← Back</button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="top-bar-title">{isAdvance ? "Advance" : "Final"} Payment Voucher</div>
+            <div className="top-bar-sub">{voucherNo}</div>
+          </div>
+          <button className="btn-print" onClick={handlePrint} disabled={printing}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 9V2h12v7" /><rect x="6" y="14" width="12" height="8" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            </svg>
+            {printing ? "Generating…" : "Download PDF"}
+          </button>
         </div>
-        <button className="btn-back" onClick={() => window.history.back()}>← Back</button>
-        <button className="rcm-toggle" onClick={() => setPayTo(p => p === "transporter" ? "driver" : "transporter")} title="Toggle Pay To">
-          <span className="rcm-toggle-label">Pay To</span>
-          <span className={`rcm-chip yes`}>{payTo === "transporter" ? "Transporter" : "Driver"}</span>
-        </button>
-        <button className="rcm-toggle" onClick={() => setRcm(p => !p)} title="Toggle RCM">
-          <span className="rcm-toggle-label">RCM</span>
-          <span className={`rcm-chip ${rcm ? "yes" : "no"}`}>{rcm ? "YES" : "NO"}</span>
-        </button>
-        <button className="btn-print" onClick={handlePrint} disabled={printing}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M6 9V2h12v7" /><rect x="6" y="14" width="12" height="8" />
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-          </svg>
-          {printing ? "Opening…" : "Download PDF"}
-        </button>
+        {/* Row 2: Pay To toggle | RCM toggle */}
+        <div className="top-bar-row2">
+          <button className="rcm-toggle" onClick={() => setPayTo(p => p === "transporter" ? "driver" : "transporter")} title="Toggle Pay To">
+            <span className="rcm-toggle-label">Pay To</span>
+            <span className="rcm-chip yes">{payTo === "transporter" ? "Transporter" : "Driver"}</span>
+          </button>
+          <button className="rcm-toggle" onClick={() => setRcm(p => !p)} title="Toggle RCM">
+            <span className="rcm-toggle-label">RCM</span>
+            <span className={`rcm-chip ${rcm ? "yes" : "no"}`}>{rcm ? "YES" : "NO"}</span>
+          </button>
+        </div>
       </div>
 
       {/* Voucher */}
       <div className="voucher-scroll">
-        <div className="voucher-card">
+        <div className="voucher-card" ref={voucherRef}>
 
           {/* Header */}
           <div className="v-header">
