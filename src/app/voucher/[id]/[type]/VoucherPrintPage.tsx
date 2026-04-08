@@ -71,6 +71,7 @@ interface Props {
 export default function VoucherPrintPage({ delivery, type }: Props) {
   const [printing, setPrinting] = useState(false);
   const [rcm, setRcm] = useState(true);
+  const [payTo, setPayTo] = useState<"transporter" | "driver">("transporter");
 
   const handlePrint = () => {
     setPrinting(true);
@@ -288,6 +289,10 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
           <div className="top-bar-sub">{voucherNo}</div>
         </div>
         <button className="btn-back" onClick={() => window.history.back()}>← Back</button>
+        <button className="rcm-toggle" onClick={() => setPayTo(p => p === "transporter" ? "driver" : "transporter")} title="Toggle Pay To">
+          <span className="rcm-toggle-label">Pay To</span>
+          <span className={`rcm-chip yes`}>{payTo === "transporter" ? "Transporter" : "Driver"}</span>
+        </button>
         <button className="rcm-toggle" onClick={() => setRcm(p => !p)} title="Toggle RCM">
           <span className="rcm-toggle-label">RCM</span>
           <span className={`rcm-chip ${rcm ? "yes" : "no"}`}>{rcm ? "YES" : "NO"}</span>
@@ -348,10 +353,17 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
 
             {/* Pay To */}
             <div className="v-block">
-              <div className="v-section-label">Pay To (Transporter)</div>
-              <div className="v-payto-name">{delivery.transporterName || "—"}</div>
-              {delivery.transpContact && (
+              <div className="v-section-label">Pay To ({payTo === "transporter" ? "Transporter" : "Driver"})</div>
+              <div className="v-payto-name">
+                {payTo === "transporter"
+                  ? (delivery.transporterName || "—")
+                  : (delivery.driverName || "—")}
+              </div>
+              {payTo === "transporter" && delivery.transpContact && (
                 <div className="v-payto-contact">Contact: {delivery.transpContact}</div>
+              )}
+              {payTo === "driver" && delivery.driverContact && (
+                <div className="v-payto-contact">Contact: {delivery.driverContact}</div>
               )}
             </div>
 
