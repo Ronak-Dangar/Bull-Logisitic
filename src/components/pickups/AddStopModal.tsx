@@ -87,7 +87,7 @@ export function AddStopModal({ masterReqId, centers, onClose, onSuccess }: AddSt
               </div>
               <div className="flex-1">
                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Est. Bags *</label>
-                 <input type="number" value={estBags} onChange={(e) => setEstBags(e.target.value)} className="input [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="e.g. 10" required />
+                 <input type="number" value={estBags} onChange={(e) => { setEstBags(e.target.value); const b = Number(e.target.value) || 0; if (b > 0) setEstWeight((b * 74.5).toFixed(1)); }} className="input [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" placeholder="e.g. 10" required />
               </div>
             </div>
           </div>

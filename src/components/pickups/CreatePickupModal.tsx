@@ -55,6 +55,10 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
       const updated = [...d.children];
       (updated[index] as any)[field] = value;
       if (field === "pickupLocType" && value === "CENTER") updated[index].villageName = "";
+      if (field === "estBags") {
+        const bags = Number(value) || 0;
+        updated[index].estWeight = bags > 0 ? parseFloat((bags * 74.5).toFixed(1)) : 0;
+      }
       return { ...d, children: updated };
     });
   };
@@ -83,6 +87,8 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
         })),
       });
       clearDraft();
+      setDraft(INITIAL_DRAFT);
+      setShowAddSupervisor({});
       onSuccess();
     } catch (err: any) {
       console.error(err);
