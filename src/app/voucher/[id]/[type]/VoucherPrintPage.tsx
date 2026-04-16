@@ -72,6 +72,8 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
   const [printing, setPrinting] = useState(false);
   const [rcm, setRcm] = useState(true);
   const [payTo, setPayTo] = useState<"transporter" | "driver">("transporter");
+  const [showWaiting, setShowWaiting] = useState(false);
+  const [showMisc, setShowMisc] = useState(true);
   const voucherRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = async () => {
@@ -103,11 +105,9 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
   const grossAmount = delivery.idealPayment ?? ratePerTon * (totalWeight / 1000);
   const advancePaid = delivery.advancePaid ?? 0;
   const waitingCharges = delivery.waitingCharges ?? 0;
+  const miscAmount = delivery.miscAmount ?? 0;
   const netFinalPayment = delivery.actuallyPaid ?? 0;
   const totalPayment = advancePaid + netFinalPayment;
-  // Implied misc charges: shown when gross - advance doesn't equal net final
-  const impliedMisc = Math.round((totalPayment - grossAmount) * 100) / 100;
-  const hasMisc = Math.abs(grossAmount - advancePaid - netFinalPayment) > 0.01;
   const paymentAmount = isAdvance ? advancePaid : netFinalPayment;
   const voucherDate = isAdvance ? delivery.createdAt : delivery.actualDeliveryDt ?? delivery.updatedAt;
 
@@ -318,8 +318,8 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
             {printing ? "Generating…" : "Download PDF"}
           </button>
         </div>
-        {/* Row 2: Pay To toggle | RCM toggle */}
-        <div className="top-bar-row2">
+        {/* Row 2: Pay To | RCM | (final only) field toggles */}
+        <div className="top-bar-row2" style={{ overflowX: "auto", flexWrap: "nowrap" }}>
           <button className="rcm-toggle" onClick={() => setPayTo(p => p === "transporter" ? "driver" : "transporter")} title="Toggle Pay To">
             <span className="rcm-toggle-label">Pay To</span>
             <span className="rcm-chip yes">{payTo === "transporter" ? "Transporter" : "Driver"}</span>
@@ -328,6 +328,18 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
             <span className="rcm-toggle-label">RCM</span>
             <span className={`rcm-chip ${rcm ? "yes" : "no"}`}>{rcm ? "YES" : "NO"}</span>
           </button>
+          {!isAdvance && (
+            <>
+              <button className="rcm-toggle" onClick={() => setShowMisc(p => !p)} title="Toggle Misc Charges line">
+                <span className="rcm-toggle-label">Misc</span>
+                <span className={`rcm-chip ${showMisc ? "yes" : "no"}`}>{showMisc ? "SHOW" : "HIDE"}</span>
+              </button>
+              <button className="rcm-toggle" onClick={() => setShowWaiting(p => !p)} title="Toggle Waiting Charges line">
+                <span className="rcm-toggle-label">Waiting</span>
+                <span className={`rcm-chip ${showWaiting ? "yes" : "no"}`}>{showWaiting ? "SHOW" : "HIDE"}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -476,13 +488,13 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
                     <span className="v-row-label">Advance Paid</span>
                     <span className="v-row-value">({fmt(advancePaid)})</span>
                   </div>
-                  {hasMisc && (
+                  {showMisc && miscAmount > 0 && (
                     <div className="v-ledger-row">
                       <span className="v-row-label">Misc Charges</span>
-                      <span className="v-row-value">+ {fmt(impliedMisc)}</span>
+                      <span className="v-row-value">({fmt(miscAmount)})</span>
                     </div>
                   )}
-                  {waitingCharges > 0 && (
+                  {showWaiting && waitingCharges > 0 && (
                     <div className="v-ledger-row">
                       <span className="v-row-label">Waiting Charges</span>
                       <span className="v-row-value">+ {fmt(waitingCharges)}</span>

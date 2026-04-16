@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
-  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download, Phone, Clock3
+  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download, Phone, Clock3, ExternalLink
 } from "lucide-react";
 import { formatWeight, formatDate, formatCurrency, getStatusColor, cn } from "@/lib/utils";
 import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus, getDeliveriesExportData } from "@/actions/deliveries";
@@ -993,6 +993,23 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                     <span className="flex items-center gap-1 truncate"><User2 className="w-3 h-3 shrink-0" />{del.driverName || "No driver"}</span>
                     <span className="flex items-center gap-1 truncate"><Package className="w-3 h-3 shrink-0" />{del.masterRequest?.commodity}</span>
                   </div>
+                  {(() => {
+                    const pickupDate = del.scheduledPickupTime || del.masterRequest?.pickupDate;
+                    const dateStr = pickupDate ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(new Date(pickupDate)) : null;
+                    const firstStop = del.masterRequest?.childPickups?.[0];
+                    const firstStopName = firstStop
+                      ? firstStop.pickupLocType === "BFH"
+                        ? `BFH${firstStop.villageName ? ` - ${firstStop.villageName}` : ""}`
+                        : firstStop.center?.centerName
+                      : null;
+                    if (!dateStr && !firstStopName) return null;
+                    return (
+                      <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400">
+                        {dateStr && <span className="flex items-center gap-1 shrink-0"><Calendar className="w-3 h-3 shrink-0" />{dateStr}</span>}
+                        {firstStopName && <span className="flex items-center gap-1 truncate"><Home className="w-3 h-3 shrink-0 text-orange-400" />{firstStopName}</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   {del.masterRequest?.id && (
@@ -1227,7 +1244,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                   <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl">
                                     <span className="font-bold text-indigo-800 dark:text-indigo-300 text-xs">Total Payment</span>
                                     <span className="text-base font-bold text-indigo-800 dark:text-indigo-300">
-                                      {formatCurrency((del.actuallyPaid || 0) + (del.advancePaid || 0) + (del.miscAmount || 0) + (del.waitingCharges || 0))}
+                                      {formatCurrency((del.actuallyPaid || 0) + (del.advancePaid || 0))}
                                     </span>
                                   </div>
                                   {/* Payment Completed Banner */}
@@ -1295,6 +1312,17 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                               <div className="h-9" />
                             )}
                           </div>
+                        )}
+
+                        {/* View Pickup Request */}
+                        {del.masterRequest?.id && (
+                          <a
+                            href={`/pickups?highlight=${del.masterRequest.id}`}
+                            className="h-9 rounded-lg border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 text-[11px] font-semibold px-2.5 py-1.5 flex items-center justify-center gap-1.5 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors w-full"
+                          >
+                            <ExternalLink className="w-3 h-3 shrink-0" />
+                            View Pickup Request
+                          </a>
                         )}
 
                         {/* Voucher download buttons */}
