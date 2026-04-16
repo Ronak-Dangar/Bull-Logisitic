@@ -299,6 +299,9 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
   const [addingStopTo, setAddingStopTo] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
   const [search, setSearch] = useState("");
+  const [factoryFilter, setFactoryFilter] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [chatReqId, setChatReqId] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<Record<string, any[]>>({});
   const [showActivity, setShowActivity] = useState<string | null>(null);
@@ -342,6 +345,17 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
 
   const filtered = pickups.filter((p: any) => {
     if (statusFilter !== "ALL" && p.status !== statusFilter) return false;
+    if (factoryFilter !== "ALL" && p.factoryId !== factoryFilter) return false;
+    if (dateFrom) {
+      const pickupDate = p.pickupDate ? new Date(p.pickupDate) : null;
+      if (!pickupDate || pickupDate < new Date(dateFrom)) return false;
+    }
+    if (dateTo) {
+      const pickupDate = p.pickupDate ? new Date(p.pickupDate) : null;
+      const toEnd = new Date(dateTo);
+      toEnd.setHours(23, 59, 59, 999);
+      if (!pickupDate || pickupDate > toEnd) return false;
+    }
     if (search) {
       const s = search.toLowerCase();
       return (
@@ -352,6 +366,8 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
     }
     return true;
   });
+
+  const hasActiveFilters = factoryFilter !== "ALL" || dateFrom || dateTo;
 
   const handleStatusChange = async (requestId: string, newStatus: string) => {
     // Optimistic update
@@ -392,19 +408,20 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
         </div>
       </button>
 
-      {/* Top bar */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by Comm. Manager name, commodity..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="input input-icon"
-          />
-        </div>
-        <div className="flex gap-2">
+      {/* Filters */}
+      <div className="space-y-2">
+        {/* Row 1: Search + Status */}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search manager, commodity, location…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input input-icon"
+            />
+          </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -414,6 +431,45 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
               <option key={s} value={s}>{s === "ALL" ? "All Statuses" : s.replace(/_/g, " ")}</option>
             ))}
           </select>
+        </div>
+
+        {/* Row 2: Factory + Date range + Clear */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <select
+            value={factoryFilter}
+            onChange={(e) => setFactoryFilter(e.target.value)}
+            className="input w-auto min-w-[140px] text-sm"
+          >
+            <option value="ALL">All Factories</option>
+            {factories.map((f: any) => (
+              <option key={f.id} value={f.id}>{f.factoryName}</option>
+            ))}
+          </select>
+
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="input w-auto text-sm"
+            title="Pickup date from"
+          />
+          <span className="text-xs text-gray-400 shrink-0">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="input w-auto text-sm"
+            title="Pickup date to"
+          />
+
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setFactoryFilter("ALL"); setDateFrom(""); setDateTo(""); }}
+              className="text-xs text-red-500 hover:text-red-600 font-medium px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       </div>
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
-  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download, Phone, Clock3, ExternalLink
+  Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download, Phone, Clock3, ExternalLink, Search
 } from "lucide-react";
 import { formatWeight, formatDate, formatCurrency, getStatusColor, cn } from "@/lib/utils";
 import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus, getDeliveriesExportData } from "@/actions/deliveries";
@@ -734,6 +734,10 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
   const [deliveries, setDeliveries] = useState(initialDeliveries);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState(initialFilter || "ALL");
+  const [search, setSearch] = useState("");
+  const [factoryFilter, setFactoryFilter] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [completingDelivery, setCompletingDelivery] = useState<any>(null);
   const [invoicePromptDelivery, setInvoicePromptDelivery] = useState<any>(null);
   const [receiptPromptDelivery, setReceiptPromptDelivery] = useState<any>(null);
@@ -770,10 +774,38 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
 
   const statuses = ["ALL", ...STEPS];
 
+  // Derive unique factories from loaded deliveries
+  const factoryOptions = Array.from(
+    new Map(deliveries.filter((d: any) => d.factory).map((d: any) => [d.factory.id, d.factory])).values()
+  ) as any[];
+
   const filtered = deliveries.filter((d: any) => {
     if (statusFilter !== "ALL" && d.status !== statusFilter) return false;
+    if (factoryFilter !== "ALL" && d.factoryId !== factoryFilter) return false;
+    if (dateFrom) {
+      const dt = d.scheduledPickupTime ? new Date(d.scheduledPickupTime) : null;
+      if (!dt || dt < new Date(dateFrom)) return false;
+    }
+    if (dateTo) {
+      const dt = d.scheduledPickupTime ? new Date(d.scheduledPickupTime) : null;
+      const toEnd = new Date(dateTo);
+      toEnd.setHours(23, 59, 59, 999);
+      if (!dt || dt > toEnd) return false;
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      return (
+        d.vehicleNumber?.toLowerCase().includes(s) ||
+        d.driverName?.toLowerCase().includes(s) ||
+        d.transporterName?.toLowerCase().includes(s) ||
+        d.masterRequest?.commodity?.toLowerCase().includes(s) ||
+        d.masterRequest?.cm?.name?.toLowerCase().includes(s)
+      );
+    }
     return true;
   });
+
+  const hasActiveFilters = factoryFilter !== "ALL" || dateFrom || dateTo || search;
 
   const handleStatusAdvance = async (id: string, currentStatus: string, delivery: any) => {
     const nextStatus = getNextStep(currentStatus);
@@ -909,8 +941,9 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
 
   return (
     <div className="space-y-4">
-      {/* Filter */}
+      {/* Filters */}
       <div className="space-y-2">
+        {/* Row 1: Status pills */}
         <div className="flex gap-2 overflow-x-auto pb-1">
           {statuses.map((s) => (
             <button
@@ -926,6 +959,58 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
               {s === "ALL" ? "All" : s.replace(/_/g, " ")}
             </button>
           ))}
+        </div>
+
+        {/* Row 2: Search + Factory + Date range */}
+        <div className="flex flex-wrap gap-2 items-center">
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search vehicle, driver, transporter…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input input-icon text-sm"
+            />
+          </div>
+
+          {factoryOptions.length > 0 && (
+            <select
+              value={factoryFilter}
+              onChange={(e) => setFactoryFilter(e.target.value)}
+              className="input w-auto min-w-[140px] text-sm"
+            >
+              <option value="ALL">All Factories</option>
+              {factoryOptions.map((f: any) => (
+                <option key={f.id} value={f.id}>{f.factoryName}</option>
+              ))}
+            </select>
+          )}
+
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="input w-auto text-sm"
+            title="Pickup date from"
+          />
+          <span className="text-xs text-gray-400 shrink-0">to</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="input w-auto text-sm"
+            title="Pickup date to"
+          />
+
+          {hasActiveFilters && (
+            <button
+              onClick={() => { setSearch(""); setFactoryFilter("ALL"); setDateFrom(""); setDateTo(""); }}
+              className="text-xs text-red-500 hover:text-red-600 font-medium px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors shrink-0"
+            >
+              Clear
+            </button>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-2">
