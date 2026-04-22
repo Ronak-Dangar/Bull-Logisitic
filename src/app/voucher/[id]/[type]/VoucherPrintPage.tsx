@@ -480,14 +480,12 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
                     <span className="v-row-label">Gross Transport Amount</span>
                     <span className="v-row-value">{fmt(grossAmount)}</span>
                   </div>
-                  <div className="v-ledger-row divider">
-                    <span className="v-divider-text">Deductions</span>
-                    <div className="v-divider-line" />
-                  </div>
-                  <div className="v-ledger-row">
-                    <span className="v-row-label">Advance Paid</span>
-                    <span className="v-row-value">({fmt(advancePaid)})</span>
-                  </div>
+                  {(showMisc && miscAmount > 0) || (showWaiting && waitingCharges > 0) ? (
+                    <div className="v-ledger-row divider">
+                      <span className="v-divider-text">Adjustments</span>
+                      <div className="v-divider-line" />
+                    </div>
+                  ) : null}
                   {showMisc && miscAmount > 0 && (
                     <div className="v-ledger-row">
                       <span className="v-row-label">Misc Charges</span>
@@ -500,17 +498,9 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
                       <span className="v-row-value">+ {fmt(waitingCharges)}</span>
                     </div>
                   )}
-                  <div className="v-ledger-row subtotal">
-                    <span className="v-row-label">Net Final Payment</span>
-                    <span className="v-row-value">{fmt(netFinalPayment)}</span>
-                  </div>
-                  <div className="v-ledger-row divider">
-                    <span className="v-divider-text">Summary</span>
-                    <div className="v-divider-line" />
-                  </div>
                   <div className="v-ledger-row total">
-                    <span className="v-row-label strong">Total Payment (Advance + Final)</span>
-                    <span className="v-row-value large">{fmt(totalPayment)}</span>
+                    <span className="v-row-label strong">Final Payment</span>
+                    <span className="v-row-value large">{fmt(netFinalPayment)}</span>
                   </div>
                 </>
               )}
