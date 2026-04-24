@@ -52,7 +52,7 @@ export async function getDeliveries(filters?: { status?: string }) {
           _count: { select: { childPickups: true, messages: true } },
         },
       },
-      factory: { select: { factoryName: true, location: true } },
+      factory: { select: { id: true, factoryName: true, location: true } },
       createdBy: { select: { name: true } },
     },
   });
@@ -86,7 +86,7 @@ export async function getDeliveriesExportData(filters?: { status?: string }) {
           _count: { select: { childPickups: true, messages: true } },
         },
       },
-      factory: { select: { factoryName: true, location: true } },
+      factory: { select: { id: true, factoryName: true, location: true } },
       createdBy: { select: { name: true } },
     },
   });
@@ -125,7 +125,7 @@ export async function getDeliveryById(id: string) {
           },
         },
       },
-      factory: { select: { factoryName: true, location: true } },
+      factory: { select: { id: true, factoryName: true, location: true } },
       createdBy: { select: { name: true } },
     },
   });
@@ -227,7 +227,9 @@ export async function updateDelivery(
     miscAmount?: number;
     waitingCharges?: number;
     advancePaid?: number;
+    advancePaymentDate?: string;
     actuallyPaid?: number;
+    finalPaymentDate?: string;
     invoiceNo?: string;
     totalBags?: number;
     receiptUrl?: string;
@@ -265,7 +267,9 @@ export async function updateDelivery(
   if (data.waitingCharges !== undefined) updateData.waitingCharges = Math.abs(data.waitingCharges);
 
   if (data.advancePaid !== undefined) updateData.advancePaid = data.advancePaid;
+  if (data.advancePaymentDate !== undefined) updateData.advancePaymentDate = data.advancePaymentDate ? new Date(data.advancePaymentDate) : null;
   if (data.actuallyPaid !== undefined) updateData.actuallyPaid = data.actuallyPaid;
+  if (data.finalPaymentDate !== undefined) updateData.finalPaymentDate = data.finalPaymentDate ? new Date(data.finalPaymentDate) : null;
   if (data.invoiceNo !== undefined) updateData.invoiceNo = data.invoiceNo;
   if (data.receiptUrl !== undefined) updateData.receiptUrl = data.receiptUrl;
   if (data.scheduledPickupTime !== undefined) updateData.scheduledPickupTime = new Date(data.scheduledPickupTime);

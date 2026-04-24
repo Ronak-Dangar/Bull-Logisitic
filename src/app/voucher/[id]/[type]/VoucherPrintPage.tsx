@@ -72,8 +72,16 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
   const [printing, setPrinting] = useState(false);
   const [rcm, setRcm] = useState(true);
   const [payTo, setPayTo] = useState<"transporter" | "driver">("transporter");
-  const [showWaiting, setShowWaiting] = useState(false);
+  const [showWaiting, setShowWaiting] = useState(true);
   const [showMisc, setShowMisc] = useState(true);
+  const [paymentDate, setPaymentDate] = useState<string>(() => {
+    if (type === "advance") {
+      const d = delivery.advancePaymentDate ?? delivery.createdAt;
+      return d ? (d as string).slice(0, 10) : "";
+    }
+    const d = delivery.finalPaymentDate ?? delivery.actualDeliveryDt ?? delivery.updatedAt;
+    return d ? (d as string).slice(0, 10) : "";
+  });
   const voucherRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = async () => {
@@ -109,7 +117,7 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
   const netFinalPayment = delivery.actuallyPaid ?? 0;
   const totalPayment = advancePaid + netFinalPayment;
   const paymentAmount = isAdvance ? advancePaid : netFinalPayment;
-  const voucherDate = isAdvance ? delivery.createdAt : delivery.actualDeliveryDt ?? delivery.updatedAt;
+  const voucherDate = paymentDate || (isAdvance ? delivery.createdAt : delivery.actualDeliveryDt ?? delivery.updatedAt);
 
   return (
     <>
@@ -163,6 +171,19 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
         }
         .rcm-chip.yes { background: #fff; color: #111; }
         .rcm-chip.no  { background: #333; color: #888; }
+        .date-toggle {
+          display: flex; align-items: center; gap: 6px;
+          background: rgba(255,255,255,0.08); border: 1px solid #444;
+          border-radius: 6px; padding: 4px 10px;
+          flex: 1; min-width: 0;
+        }
+        .date-toggle-label { font-size: 11px; color: #aaa; white-space: nowrap; flex-shrink: 0; }
+        .date-input {
+          background: transparent; border: none; outline: none;
+          color: #fff; font-size: 11px; font-weight: 700;
+          width: 100%; min-width: 0; cursor: pointer;
+          color-scheme: dark;
+        }
 
         /* Scroll container */
         .voucher-scroll { padding: 16px; max-width: 680px; margin: 0 auto; }
@@ -318,8 +339,17 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
             {printing ? "Generating…" : "Download PDF"}
           </button>
         </div>
-        {/* Row 2: Pay To | RCM | (final only) field toggles */}
+        {/* Row 2: Date | Pay To | RCM | (final only) field toggles */}
         <div className="top-bar-row2" style={{ overflowX: "auto", flexWrap: "nowrap" }}>
+          <div className="date-toggle">
+            <span className="date-toggle-label">Date</span>
+            <input
+              type="date"
+              className="date-input"
+              value={paymentDate}
+              onChange={e => setPaymentDate(e.target.value)}
+            />
+          </div>
           <button className="rcm-toggle" onClick={() => setPayTo(p => p === "transporter" ? "driver" : "transporter")} title="Toggle Pay To">
             <span className="rcm-toggle-label">Pay To</span>
             <span className="rcm-chip yes">{payTo === "transporter" ? "Transporter" : "Driver"}</span>
@@ -449,18 +479,6 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
 
               {isAdvance ? (
                 <>
-                  <div className="v-ledger-row">
-                    <span className="v-row-label">Transport Rate</span>
-                    <span className="v-row-value muted">₹{ratePerTon.toLocaleString("en-IN")} / MT</span>
-                  </div>
-                  <div className="v-ledger-row">
-                    <span className="v-row-label">Estimated Weight</span>
-                    <span className="v-row-value muted">{fmtWeight(delivery.totalWeightFinal)}</span>
-                  </div>
-                  <div className="v-ledger-row subtotal">
-                    <span className="v-row-label">Gross Transport Amount</span>
-                    <span className="v-row-value">{fmt(grossAmount)}</span>
-                  </div>
                   <div className="v-ledger-row total">
                     <span className="v-row-label strong">Advance Payment</span>
                     <span className="v-row-value large">{fmt(advancePaid)}</span>
@@ -480,22 +498,22 @@ export default function VoucherPrintPage({ delivery, type }: Props) {
                     <span className="v-row-label">Gross Transport Amount</span>
                     <span className="v-row-value">{fmt(grossAmount)}</span>
                   </div>
-                  {(showMisc && miscAmount > 0) || (showWaiting && waitingCharges > 0) ? (
-                    <div className="v-ledger-row divider">
-                      <span className="v-divider-text">Adjustments</span>
-                      <div className="v-divider-line" />
-                    </div>
-                  ) : null}
                   {showMisc && miscAmount > 0 && (
-                    <div className="v-ledger-row">
-                      <span className="v-row-label">Misc Charges</span>
-                      <span className="v-row-value">({fmt(miscAmount)})</span>
-                    </div>
+                    <>
+                      <div className="v-ledger-row divider">
+                        <span className="v-divider-text">Deductions</span>
+                        <div className="v-divider-line" />
+                      </div>
+                      <div className="v-ledger-row">
+                        <span className="v-row-label">Misc Charges</span>
+                        <span className="v-row-value">({fmt(miscAmount)})</span>
+                      </div>
+                    </>
                   )}
                   {showWaiting && waitingCharges > 0 && (
-                    <div className="v-ledger-row">
-                      <span className="v-row-label">Waiting Charges</span>
-                      <span className="v-row-value">+ {fmt(waitingCharges)}</span>
+                    <div className="v-ledger-row" style={{ background: "#f0fff4" }}>
+                      <span className="v-row-label">+ Waiting Charges</span>
+                      <span className="v-row-value" style={{ color: "#166534" }}>+ {fmt(waitingCharges)}</span>
                     </div>
                   )}
                   <div className="v-ledger-row total">

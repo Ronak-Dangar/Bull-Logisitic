@@ -524,6 +524,40 @@ function PhoneField({ id, fieldKey, label, initialValue, isReadonly = false, onB
   );
 }
 
+// ─── Payment Date Field ──────────────────────────────────
+function PaymentDateField({ id, fieldKey, initialValue }: { id: string; fieldKey: string; initialValue?: string | null }) {
+  const router = useRouter();
+  const toDateStr = (v?: string | null) => v ? new Date(v).toISOString().slice(0, 10) : "";
+  const [val, setVal] = useState(() => toDateStr(initialValue));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setVal(toDateStr(initialValue)); }, [initialValue]);
+
+  const handleBlur = async () => {
+    if (!val || val === toDateStr(initialValue)) return;
+    setSaving(true);
+    try {
+      await updateDelivery(id, { [fieldKey]: val });
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-gray-400 text-[11px]">Payment Date</span>
+      <input
+        type="date"
+        value={val}
+        onChange={e => setVal(e.target.value)}
+        onBlur={handleBlur}
+        disabled={saving}
+        className="text-[11px] bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+      />
+    </div>
+  );
+}
+
 // ─── Complete Delivery Popup ─────────────────────────────
 function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any; onClose: () => void; onConfirm: (balanceAmount: number) => void }) {
   const ideal = delivery.idealPayment || 0;
@@ -1297,6 +1331,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                     <EditableField id={del.id} fieldKey="advancePaid" label="" initialValue={del.advancePaid} variant="gray" onBeforeChange={(STEPS.indexOf(del.status) >= STEPS.indexOf("COMPLETED") && del.actuallyPaid) ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                   </div>
                                 </div>
+                                {del.advancePaid ? <PaymentDateField id={del.id} fieldKey="advancePaymentDate" initialValue={del.advancePaymentDate} /> : null}
 
                                 {/* Misc Amount */}
                                 <div className="flex justify-between items-center">
@@ -1326,6 +1361,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                                       <EditableField id={del.id} fieldKey="actuallyPaid" label="" initialValue={del.actuallyPaid} variant="gray" onBeforeChange={del.actuallyPaid ? () => window.confirm("Are you sure you want to change this?") : undefined} />
                                     </div>
                                   </div>
+                                  {del.actuallyPaid ? <PaymentDateField id={del.id} fieldKey="finalPaymentDate" initialValue={del.finalPaymentDate} /> : null}
                                   <div className="flex justify-between items-center bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl">
                                     <span className="font-bold text-indigo-800 dark:text-indigo-300 text-xs">Total Payment</span>
                                     <span className="text-base font-bold text-indigo-800 dark:text-indigo-300">
