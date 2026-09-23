@@ -5,69 +5,117 @@ import { auth } from "@/lib/auth";
 import { logActivity } from "@/lib/audit";
 import { DeliveryStatus } from "@prisma/client";
 import { sendPushToUser } from "@/lib/webpush";
+import { encodeCursor, afterCursor, clampTake, type Page } from "@/lib/pagination";
 
 // ─── Get Deliveries ─────────────────────────────────────
+// Paginated + filtered server-side (see lib/pagination for the cursor).
 
-export async function getDeliveries(filters?: { status?: string }) {
+const DELIVERIES_PAGE_SIZE = 30;
+
+export type DeliveryListFilters = {
+  status?: string;
+  factoryId?: string;
+  from?: string; // ISO instant, inclusive (scheduled pickup time)
+  to?: string; // ISO instant, inclusive
+  search?: string;
+  cursor?: string | null;
+  take?: number;
+};
+
+// Shared by the list and the Excel export so both always show the same rows.
+function buildDeliveryWhere(user: any, filters: DeliveryListFilters) {
+  const where: any = { AND: [] as any[] };
+  if (user.role === "CM") where.masterRequest = { cmId: user.id };
+  if (filters.status && filters.status !== "ALL") where.status = filters.status;
+  if (filters.factoryId && filters.factoryId !== "ALL") where.factoryId = filters.factoryId;
+  if (filters.from || filters.to) {
+    where.scheduledPickupTime = {
+      ...(filters.from && { gte: new Date(filters.from) }),
+      ...(filters.to && { lte: new Date(filters.to) }),
+    };
+  }
+  const search = filters.search?.trim();
+  if (search) {
+    where.AND.push({
+      OR: [
+        { vehicleNumber: { contains: search, mode: "insensitive" } },
+        { driverName: { contains: search, mode: "insensitive" } },
+        { transporterName: { contains: search, mode: "insensitive" } },
+        { masterRequest: { commodity: { contains: search, mode: "insensitive" } } },
+        { masterRequest: { cm: { name: { contains: search, mode: "insensitive" } } } },
+      ],
+    });
+  }
+  return where;
+}
+
+export async function getDeliveries(filters: DeliveryListFilters = {}) {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
   const user = session.user as any;
 
-  const where: any = {};
-  if (user.role === "CM") {
-    where.masterRequest = { cmId: user.id };
-  }
-  
-  if (filters?.status && filters.status !== "ALL") {
-    where.status = filters.status;
-  }
+  const where = buildDeliveryWhere(user, filters);
+  const pageWhere = { ...where, AND: [...where.AND] };
+  if (filters.cursor) pageWhere.AND.push(afterCursor(filters.cursor));
 
-  return prisma.deliveryDetail.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: {
-      masterRequest: {
-        select: {
-          id: true,
-          commodity: true,
-          totalEstWeight: true,
-          deliveryLocation: true,
-          pickupDate: true,
-          status: true,
-          cm: { select: { name: true } },
-          childPickups: {
-            orderBy: { stopSequence: "asc" as const },
-            select: {
-              id: true,
-              stopSequence: true,
-              pickupLocType: true,
-              villageName: true,
-              estWeight: true,
-              actualWeight: true,
-              estBags: true,
-              actualBags: true,
-              center: { select: { centerName: true } },
+  const take = clampTake(filters.take, DELIVERIES_PAGE_SIZE);
+  const [rows, total] = await Promise.all([
+    prisma.deliveryDetail.findMany({
+      where: pageWhere,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: take + 1,
+      include: {
+        masterRequest: {
+          select: {
+            id: true,
+            commodity: true,
+            totalEstWeight: true,
+            deliveryLocation: true,
+            pickupDate: true,
+            status: true,
+            cm: { select: { name: true } },
+            childPickups: {
+              orderBy: { stopSequence: "asc" as const },
+              select: {
+                id: true,
+                stopSequence: true,
+                pickupLocType: true,
+                villageName: true,
+                estWeight: true,
+                actualWeight: true,
+                estBags: true,
+                actualBags: true,
+                center: { select: { centerName: true } },
+              },
             },
+            _count: { select: { childPickups: true, messages: true } },
           },
-          _count: { select: { childPickups: true, messages: true } },
         },
+        factory: { select: { id: true, factoryName: true, location: true } },
+        createdBy: { select: { name: true } },
       },
-      factory: { select: { id: true, factoryName: true, location: true } },
-      createdBy: { select: { name: true } },
-    },
-  });
+    }),
+    filters.cursor ? Promise.resolve(null) : prisma.deliveryDetail.count({ where }),
+  ]);
+
+  const hasMore = rows.length > take;
+  const items = hasMore ? rows.slice(0, take) : rows;
+  const last = items[items.length - 1];
+
+  return JSON.parse(JSON.stringify({
+    items,
+    nextCursor: hasMore && last ? encodeCursor(last.createdAt, last.id) : null,
+    total,
+  })) as Page<any>;
 }
 
 // ─── Export Deliveries + Logs Data ─────────────────────
 
-export async function getDeliveriesExportData(filters?: { status?: string }) {
+export async function getDeliveriesExportData(filters: DeliveryListFilters = {}) {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
 
-  const where: any = {};
-  if (filters?.status && filters.status !== "ALL") {
-    where.status = filters.status;
-  }
+  const where = buildDeliveryWhere(session.user as any, filters);
 
   const deliveries = await prisma.deliveryDetail.findMany({
     where,

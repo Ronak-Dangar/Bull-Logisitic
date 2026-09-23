@@ -14,7 +14,7 @@ export function Header({ title }: { title?: string }) {
   useEffect(() => setMounted(true), []);
 
   return (
-    <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-800">
+    <header className="sticky top-0 z-40 bg-white/95 dark:bg-gray-900/95 md:bg-white/80 md:dark:bg-gray-900/80 md:backdrop-blur-xl border-b border-gray-200 dark:border-gray-800">
       <div className="flex items-center justify-between px-4 md:px-6 py-3">
         <div className="flex items-center gap-3">
           <h1 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100">

@@ -125,7 +125,7 @@ body {
   border-radius: 1rem;
   border: 1px solid #e5e7eb;
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  transition: all 0.2s;
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .card-hover:hover {
@@ -282,4 +282,10 @@ body {
 
 .dark .glass {
   background-color: rgba(17, 24, 39, 0.7);
+}
+
+/* Skip layout/paint for off-screen list cards; the browser remembers each card's last real height */
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
 }

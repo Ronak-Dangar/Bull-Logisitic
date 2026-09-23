@@ -4,8 +4,9 @@ import { PickupsClient } from "@/components/pickups/PickupsClient";
 
 export default async function PickupsPage({ searchParams }: { searchParams: Promise<{ status?: string; highlight?: string }> }) {
   const params = await searchParams;
-  const [pickups, centers, factories] = await Promise.all([
-    getPickups(),
+  const status = params.status || "ALL";
+  const [initialPage, centers, factories] = await Promise.all([
+    getPickups({ status, ensureId: params.highlight }),
     getUserCenters(),
     getFactories(),
   ]);
@@ -14,11 +15,13 @@ export default async function PickupsPage({ searchParams }: { searchParams: Prom
     <>
       <Header title="Pickup Management" />
       <div className="p-4 md:p-6">
+        {/* keyed so a new ?status / ?highlight starts from fresh filter state */}
         <PickupsClient
-          pickups={JSON.parse(JSON.stringify(pickups))}
+          key={`${status}:${params.highlight ?? ""}`}
+          initialPage={initialPage}
           centers={JSON.parse(JSON.stringify(centers))}
           factories={JSON.parse(JSON.stringify(factories))}
-          initialStatusFilter={params.status || "ALL"}
+          initialStatusFilter={status}
           highlightId={params.highlight}
         />
       </div>

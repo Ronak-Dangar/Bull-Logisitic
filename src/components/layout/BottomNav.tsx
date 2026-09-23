@@ -26,7 +26,7 @@ export function BottomNav() {
     .slice(0, 5);
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800 safe-area-bottom">
+    <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 safe-area-bottom">
       <div className="flex justify-around items-center py-1.5">
         {filteredNav.map((item) => {
           const Icon = iconMap[item.icon];

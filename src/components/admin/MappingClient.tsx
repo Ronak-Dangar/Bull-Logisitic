@@ -63,7 +63,7 @@ export function MappingClient({ mappings, users, centers }: MappingClientProps) 
             key={group.user.id}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
+            transition={{ delay: Math.min(i * 0.03, 0.15) }}
             className="card p-4"
           >
             <div className="flex items-center gap-3 mb-3">
@@ -90,7 +90,7 @@ export function MappingClient({ mappings, users, centers }: MappingClientProps) 
 
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAdd(false)} />
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowAdd(false)} />
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative card p-6 w-full max-w-md z-10">
             <div className="flex justify-between mb-4">
               <h3 className="font-bold text-gray-900 dark:text-white">Add Mapping</h3>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus, Search, ChevronDown, MapPin, User2, Weight,
@@ -12,15 +12,20 @@ import { CreateDeliveryModal } from "../deliveries/CreateDeliveryModal";
 import { AddStopModal } from "./AddStopModal";
 import { ChatPopup } from "../shared/ChatPopup";
 import { UrgentApprovalPopup } from "./UrgentApprovalPopup";
-import { updateRequestStatus, updateChildPickup, removeChildPickup, updateMasterRequestFactory } from "@/actions/pickups";
+import { getPickups, updateRequestStatus, updateChildPickup, removeChildPickup, updateMasterRequestFactory } from "@/actions/pickups";
+import type { Page } from "@/lib/pagination";
+import { usePagedList, useDebouncedValue, dayRange } from "@/lib/usePagedList";
+import { LoadMore } from "../shared/LoadMore";
 import { getEntityActivityLogs } from "@/actions/admin";
-import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { LogDiff } from "../shared/LogDiff";
 
+// Lets the inline editors below re-sync the paged list after a save
+const ReloadContext = createContext<() => void>(() => {});
+
 // Inline editable weight component
 function EditableWeight({ child }: { child: any }) {
-  const router = useRouter();
+  const reload = useContext(ReloadContext);
   const [val, setVal] = useState(child.actualWeight || child.estWeight || "");
   const [loading, setLoading] = useState(false);
 
@@ -30,7 +35,7 @@ function EditableWeight({ child }: { child: any }) {
     setLoading(true);
     try {
       await updateChildPickup(child.id, { actualWeight: num });
-      router.refresh();
+      reload();
     } catch (e) {
       console.error(e);
       setVal(child.actualWeight || child.estWeight); // revert on error
@@ -56,7 +61,7 @@ function EditableWeight({ child }: { child: any }) {
 }
 
 function EditableBags({ child }: { child: any }) {
-  const router = useRouter();
+  const reload = useContext(ReloadContext);
   const [val, setVal] = useState(child.actualBags || child.estBags || "");
   const [loading, setLoading] = useState(false);
 
@@ -66,7 +71,7 @@ function EditableBags({ child }: { child: any }) {
     setLoading(true);
     try {
       await updateChildPickup(child.id, { actualBags: num });
-      router.refresh();
+      reload();
     } catch (e) {
       console.error(e);
       setVal(child.actualBags || child.estBags); // revert on error
@@ -99,7 +104,7 @@ function getPickupPointLabel(stop: any) {
 }
 
 function DeleteStopButton({ childId, parentStatus, isCM }: { childId: string; parentStatus: string; isCM: boolean }) {
-  const router = useRouter();
+  const reload = useContext(ReloadContext);
   const [loading, setLoading] = useState(false);
 
   const handleDelete = async () => {
@@ -110,7 +115,7 @@ function DeleteStopButton({ childId, parentStatus, isCM }: { childId: string; pa
       if ((result as any)?.urgentApproval) {
         alert("Removal submitted for LM approval.");
       }
-      router.refresh();
+      reload();
     } catch (e: any) {
       alert(e.message);
     } finally {
@@ -131,7 +136,7 @@ function DeleteStopButton({ childId, parentStatus, isCM }: { childId: string; pa
 }
 
 function EditableLocation({ child, centers, canEdit }: { child: any; centers: any[]; canEdit: boolean }) {
-  const router = useRouter();
+  const reload = useContext(ReloadContext);
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(child.pickupLocType === "BFH" ? (child.villageName || "") : (child.centerId || ""));
   const [loading, setLoading] = useState(false);
@@ -148,7 +153,7 @@ function EditableLocation({ child, centers, canEdit }: { child: any; centers: an
         alert("Change submitted for LM approval.");
       }
       setEditing(false);
-      router.refresh();
+      reload();
     } catch (e: any) {
       alert(e.message);
     } finally {
@@ -204,7 +209,7 @@ function EditableLocation({ child, centers, canEdit }: { child: any; centers: an
 }
 
 function EditableFactory({ req, factories, canEdit, isCM }: { req: any; factories: any[]; canEdit: boolean; isCM: boolean }) {
-  const router = useRouter();
+  const reload = useContext(ReloadContext);
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(req.factoryId || "");
   const [loading, setLoading] = useState(false);
@@ -220,7 +225,7 @@ function EditableFactory({ req, factories, canEdit, isCM }: { req: any; factorie
         alert("Drop location change submitted for LM approval.");
       }
       setEditing(false);
-      router.refresh();
+      reload();
     } catch (e: any) {
       alert(e.message);
     } finally {
@@ -279,7 +284,7 @@ function getPickupRouteLabel(req: any) {
 }
 
 interface PickupsClientProps {
-  pickups: any[];
+  initialPage: Page<any>;
   centers: any[];
   factories: any[];
   urgentApprovals?: any[];
@@ -287,12 +292,10 @@ interface PickupsClientProps {
   highlightId?: string;
 }
 
-export function PickupsClient({ pickups: initialPickups, centers, factories, urgentApprovals = [], initialStatusFilter = "ALL", highlightId }: PickupsClientProps) {
-  const router = useRouter();
+export function PickupsClient({ initialPage, centers, factories, urgentApprovals = [], initialStatusFilter = "ALL", highlightId }: PickupsClientProps) {
   const { data: session } = useSession();
   const isCM = (session?.user as any)?.role === "CM";
   const isLM = (session?.user as any)?.role === "LM" || (session?.user as any)?.role === "ADMIN";
-  const [pickups, setPickups] = useState(initialPickups);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showDelivery, setShowDelivery] = useState<string | null>(null);
@@ -302,6 +305,15 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
   const [factoryFilter, setFactoryFilter] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
+  const listFilters = useMemo(() => ({
+    status: statusFilter,
+    factoryId: factoryFilter,
+    search: debouncedSearch,
+    ...dayRange(dateFrom, dateTo),
+  }), [statusFilter, factoryFilter, debouncedSearch, dateFrom, dateTo]);
+  const { items: pickups, setItems: setPickups, total, hasMore, loading: listLoading, loadingMore, loadMore, reload } =
+    usePagedList(initialPage, listFilters, getPickups);
   const [chatReqId, setChatReqId] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<Record<string, any[]>>({});
   const [showActivity, setShowActivity] = useState<string | null>(null);
@@ -338,34 +350,13 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
     setApprovalQueue((prev) => prev.filter((a) => a.id !== id));
   };
 
-  // Sync from server when props change (e.g. after creation)
-  useEffect(() => { setPickups(initialPickups); }, [initialPickups]);
-
   const statuses = ["ALL", "SUBMITTED", "FINDING_VEHICLE", "UNABLE_TO_FIND", "PROCESSED", "OVER_TO_NEXT", "REJECTED"];
 
-  const filtered = pickups.filter((p: any) => {
-    if (statusFilter !== "ALL" && p.status !== statusFilter) return false;
-    if (factoryFilter !== "ALL" && p.factoryId !== factoryFilter) return false;
-    if (dateFrom) {
-      const pickupDate = p.pickupDate ? new Date(p.pickupDate) : null;
-      if (!pickupDate || pickupDate < new Date(dateFrom)) return false;
-    }
-    if (dateTo) {
-      const pickupDate = p.pickupDate ? new Date(p.pickupDate) : null;
-      const toEnd = new Date(dateTo);
-      toEnd.setHours(23, 59, 59, 999);
-      if (!pickupDate || pickupDate > toEnd) return false;
-    }
-    if (search) {
-      const s = search.toLowerCase();
-      return (
-        p.commodity?.toLowerCase().includes(s) ||
-        p.deliveryLocation?.toLowerCase().includes(s) ||
-        p.cm?.name?.toLowerCase().includes(s)
-      );
-    }
-    return true;
-  });
+  // Filtering happens on the server; the status check here just drops optimistically-changed rows instantly
+  const filtered = useMemo(
+    () => (statusFilter === "ALL" ? pickups : pickups.filter((p: any) => p.status === statusFilter)),
+    [pickups, statusFilter]
+  );
 
   const hasActiveFilters = factoryFilter !== "ALL" || dateFrom || dateTo;
 
@@ -373,7 +364,7 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
     // Optimistic update
     setPickups((prev) => prev.map((p: any) => p.id === requestId ? { ...p, status: newStatus } : p));
     await updateRequestStatus(requestId, newStatus as any);
-    router.refresh();
+    reload();
   };
 
   const toggleActivity = async (entityId: string) => {
@@ -393,6 +384,7 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
   };
 
   return (
+    <ReloadContext.Provider value={reload}>
     <div className="space-y-4">
       {/* Massive Create Button */}
       <button
@@ -474,20 +466,16 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
       </div>
 
       {/* Results count */}
-      <p className="text-sm text-gray-500">{filtered.length} request{filtered.length !== 1 ? "s" : ""}</p>
+      <p className="text-sm text-gray-500">{total ?? filtered.length} request{(total ?? filtered.length) !== 1 ? "s" : ""}</p>
 
       {/* Request cards */}
-      <div className="space-y-3">
-        <AnimatePresence>
-          {filtered.map((req: any, index: number) => (
-            <motion.div
+      <div className={cn("space-y-3 transition-opacity", listLoading && "opacity-60")}>
+        {filtered.map((req: any) => (
+            <div
               key={req.id}
               ref={(el) => { cardRefs.current[req.id] = el; }}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.05 }}
               className={cn(
-                "card-hover overflow-hidden",
+                "card-hover overflow-hidden cv-auto",
                 highlightedId === req.id && "ring-2 ring-emerald-500 ring-offset-2 dark:ring-offset-gray-900 animate-pulse"
               )}
             >
@@ -770,9 +758,8 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
                   </motion.div>
                 )}
               </AnimatePresence>
-            </motion.div>
+            </div>
           ))}
-        </AnimatePresence>
 
         {filtered.length === 0 && (
           <div className="card p-12 text-center">
@@ -780,6 +767,8 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
             <p className="text-gray-500 dark:text-gray-400">No pickup requests found</p>
           </div>
         )}
+
+        <LoadMore hasMore={hasMore} loading={loadingMore} onLoadMore={loadMore} />
       </div>
 
       {/* Create pickup modal */}
@@ -788,7 +777,7 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
           centers={centers}
           factories={factories}
           onClose={() => setShowCreate(false)}
-          onSuccess={() => { setShowCreate(false); router.refresh(); }}
+          onSuccess={() => { setShowCreate(false); reload(); }}
         />
       )}
 
@@ -799,7 +788,7 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
           initialFactoryId={pickups.find((p: any) => p.id === showDelivery)?.factoryId}
           factories={factories}
           onClose={() => setShowDelivery(null)}
-          onSuccess={() => { setShowDelivery(null); router.refresh(); }}
+          onSuccess={() => { setShowDelivery(null); reload(); }}
         />
       )}
 
@@ -809,7 +798,7 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
            masterReqId={addingStopTo}
            centers={centers}
            onClose={() => setAddingStopTo(null)}
-           onSuccess={() => { setAddingStopTo(null); router.refresh(); }}
+           onSuccess={() => { setAddingStopTo(null); reload(); }}
          />
       )}
 
@@ -818,5 +807,6 @@ export function PickupsClient({ pickups: initialPickups, centers, factories, urg
         <ChatPopup masterReqId={chatReqId} onClose={() => setChatReqId(null)} />
       )}
     </div>
+    </ReloadContext.Provider>
   );
 }

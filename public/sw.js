@@ -46,7 +46,7 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 // ─── Offline Caching Service Worker ──────────────────────────────────
-const CACHE_NAME = "bull-logistic-cache-v2";
+const CACHE_NAME = "bull-logistic-cache-v3";
 const OFFLINE_URL = "/";
 
 const ASSETS_TO_CACHE = [
@@ -103,7 +103,15 @@ self.addEventListener("fetch", (event) => {
         return;
     }
 
-    // Cache-first strategy for static assets (images, CSS, JS)
+    // Cache-first for Next's hashed build assets (immutable, safe to keep forever).
+    // Everything else — RSC payloads, images, etc. — goes straight to the network untouched.
+    // Skipped on localhost: dev-server chunk names aren't content-hashed.
+    const url = new URL(event.request.url);
+    const isDev = self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1";
+    if (isDev || url.origin !== self.location.origin || !url.pathname.startsWith("/_next/static/")) {
+        return;
+    }
+
     event.respondWith(
         (async () => {
             const cache = await caches.open(CACHE_NAME);
@@ -111,13 +119,11 @@ self.addEventListener("fetch", (event) => {
             if (cachedResponse) {
                 return cachedResponse;
             }
-            try {
-                const networkResponse = await fetch(event.request);
-                // Optionally cache fetched assets here
-                return networkResponse;
-            } catch (error) {
-                return new Response("Asset offline", { status: 503 });
+            const networkResponse = await fetch(event.request);
+            if (networkResponse.ok) {
+                cache.put(event.request, networkResponse.clone());
             }
+            return networkResponse;
         })()
     );
 });

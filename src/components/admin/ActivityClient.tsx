@@ -39,7 +39,7 @@ export function ActivityClient({ logs }: { logs: any[] }) {
               key={log.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i * 0.02, 0.3) }}
+              transition={{ delay: Math.min(i * 0.02, 0.15) }}
               className="card-hover overflow-hidden"
             >
               <button

@@ -65,7 +65,7 @@ export function UsersClient({ users }: UsersClientProps) {
             key={user.id}
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
+            transition={{ delay: Math.min(i * 0.03, 0.15) }}
             className="card p-4"
           >
             <div className="flex items-center gap-3 mb-3">
@@ -96,7 +96,7 @@ export function UsersClient({ users }: UsersClientProps) {
       {/* Create modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowCreate(false)} />
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative card p-6 w-full max-w-md z-10">
             <div className="flex justify-between mb-4">
               <h3 className="font-bold text-gray-900 dark:text-white">New User</h3>
@@ -120,7 +120,7 @@ export function UsersClient({ users }: UsersClientProps) {
       {/* Reset password modal */}
       {showReset && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowReset(null)} />
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowReset(null)} />
           <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="relative card p-6 w-full max-w-sm z-10">
             <h3 className="font-bold text-gray-900 dark:text-white mb-4">Reset Password</h3>
             <form onSubmit={handleReset} className="space-y-4">

@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Truck, ChevronDown, MapPin, User2, MessageSquare,
   Calendar, CheckCircle2, Package, ScrollText, AlertTriangle, Home, X, FileText, ChevronRight, Pencil, Plus, Undo2, Download, Phone, Clock3, ExternalLink, Search
 } from "lucide-react";
 import { formatWeight, formatDate, formatCurrency, getStatusColor, cn } from "@/lib/utils";
-import { updateDeliveryStatus, updateDelivery, undoDeliveryStatus, getDeliveriesExportData } from "@/actions/deliveries";
+import { getDeliveries, updateDeliveryStatus, updateDelivery, undoDeliveryStatus, getDeliveriesExportData } from "@/actions/deliveries";
+import type { Page } from "@/lib/pagination";
+import { usePagedList, useDebouncedValue, dayRange } from "@/lib/usePagedList";
+import { LoadMore } from "../shared/LoadMore";
 import { getEntityActivityLogs } from "@/actions/admin";
-import { useRouter } from "next/navigation";
 import { ChatPopup } from "../shared/ChatPopup";
 import { LogDiff } from "../shared/LogDiff";
 
@@ -184,6 +186,8 @@ function downloadExcelXml(deliveryRows: unknown[][], logRows: unknown[][]) {
   URL.revokeObjectURL(url);
 }
 
+const shortDateFmt = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" });
+
 function groupLogsByDate(logs: any[]) {
   const groups: Record<string, any[]> = {};
   logs.forEach((log) => {
@@ -203,7 +207,6 @@ function groupLogsByDate(logs: any[]) {
 }
 
 function EditableField({ id, label, initialValue, fieldKey, type = "number", validate, variant = "ghost", isReadonly = false, onBeforeChange }: any) {
-  const router = useRouter();
   const [val, setVal] = useState(initialValue || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -253,9 +256,7 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
     }
   }, [initialValue]);
 
-  // Allow consumer to pass a global callback to update parent state after API call
-  // This is a quick fix; a robust solution would use a React context or lift state up completely.
-  // For now, next/navigation router.refresh() handles the server state, but local UI needs an optimistic push
+  // Saves push the server's updated row to the parent via a 'delivery-updated' event
   const handleBlur = async () => {
     let finalVal = type === "number" ? Number(val) : val;
     if (type === "number" && val === "") finalVal = 0; // handle empty numeric clearing
@@ -279,14 +280,12 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
 
     setLoading(true);
     try {
-      await updateDelivery(id, { [fieldKey]: finalVal });
+      const updated = await updateDelivery(id, { [fieldKey]: finalVal });
 
-      // Dispatch a custom event so the parent DeliveriesClient can update its local state immediately
+      // Merge the saved row (incl. recalculated idealPayment) into parent state — no full page refetch
       window.dispatchEvent(new CustomEvent('delivery-updated', {
-        detail: { id, fieldKey, finalVal }
+        detail: { id, fieldKey, finalVal, updated: JSON.parse(JSON.stringify(updated)) }
       }));
-
-      router.refresh();
     } catch (e) {
       console.error(e);
       setVal(initialValue || "");
@@ -321,15 +320,14 @@ function EditableField({ id, label, initialValue, fieldKey, type = "number", val
     setError(null);
     setLoading(true);
     try {
-      await updateDelivery(id, { [fieldKey]: finalVal || null });
+      const updated = await updateDelivery(id, { [fieldKey]: finalVal || null });
 
       window.dispatchEvent(new CustomEvent("delivery-updated", {
-        detail: { id, fieldKey, finalVal }
+        detail: { id, fieldKey, finalVal, updated: JSON.parse(JSON.stringify(updated)) }
       }));
 
       setVal(finalVal);
       setIsDateTimeEditorOpen(false);
-      router.refresh();
     } catch (e) {
       console.error(e);
       const parts = toLocalDateTimeParts(initialValue);
@@ -526,7 +524,6 @@ function PhoneField({ id, fieldKey, label, initialValue, isReadonly = false, onB
 
 // ─── Payment Date Field ──────────────────────────────────
 function PaymentDateField({ id, fieldKey, initialValue }: { id: string; fieldKey: string; initialValue?: string | null }) {
-  const router = useRouter();
   const toDateStr = (v?: string | null) => v ? new Date(v).toISOString().slice(0, 10) : "";
   const [val, setVal] = useState(() => toDateStr(initialValue));
   const [saving, setSaving] = useState(false);
@@ -536,8 +533,10 @@ function PaymentDateField({ id, fieldKey, initialValue }: { id: string; fieldKey
     if (!val || val === toDateStr(initialValue)) return;
     setSaving(true);
     try {
-      await updateDelivery(id, { [fieldKey]: val });
-      router.refresh();
+      const updated = await updateDelivery(id, { [fieldKey]: val });
+      window.dispatchEvent(new CustomEvent("delivery-updated", {
+        detail: { id, fieldKey, finalVal: val, updated: JSON.parse(JSON.stringify(updated)) }
+      }));
     } finally {
       setSaving(false);
     }
@@ -579,7 +578,7 @@ function CompleteDeliveryPopup({ delivery, onClose, onConfirm }: { delivery: any
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
       <motion.div
@@ -675,7 +674,7 @@ function ReceiptPromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
       <motion.div
@@ -717,7 +716,8 @@ function ReceiptPromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
 }
 
 interface DeliveriesClientProps {
-  deliveries: any[];
+  initialPage: Page<any>;
+  factories: any[];
   initialFilter?: string;
   isCM?: boolean;
 }
@@ -736,7 +736,7 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 bg-black/50" onClick={onClose} />
       <motion.div initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} className="relative w-full max-w-sm card p-4 z-10 space-y-3 rounded-b-none sm:rounded-b-2xl">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -763,15 +763,22 @@ function InvoicePromptPopup({ delivery, onClose, onConfirm }: { delivery: any; o
   );
 }
 
-export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter, isCM = false }: DeliveriesClientProps) {
-  const router = useRouter();
-  const [deliveries, setDeliveries] = useState(initialDeliveries);
+export function DeliveriesClient({ initialPage, factories: factoryOptions, initialFilter, isCM = false }: DeliveriesClientProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState(initialFilter || "ALL");
   const [search, setSearch] = useState("");
   const [factoryFilter, setFactoryFilter] = useState("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const debouncedSearch = useDebouncedValue(search);
+  const listFilters = useMemo(() => ({
+    status: statusFilter,
+    factoryId: factoryFilter,
+    search: debouncedSearch,
+    ...dayRange(dateFrom, dateTo),
+  }), [statusFilter, factoryFilter, debouncedSearch, dateFrom, dateTo]);
+  const { items: deliveries, setItems: setDeliveries, total, hasMore, loading: listLoading, loadingMore, loadMore, reload } =
+    usePagedList(initialPage, listFilters, getDeliveries);
   const [completingDelivery, setCompletingDelivery] = useState<any>(null);
   const [invoicePromptDelivery, setInvoicePromptDelivery] = useState<any>(null);
   const [receiptPromptDelivery, setReceiptPromptDelivery] = useState<any>(null);
@@ -791,53 +798,27 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
     }
   };
 
-  // Sync from server when props change, and setup local optimistic listener
+  // Merge rows saved by the inline field editors
   useEffect(() => {
-    setDeliveries(initialDeliveries);
-
     const handleLocalUpdate = async (e: any) => {
-      const { id, fieldKey, finalVal } = e.detail;
-      setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, [fieldKey]: finalVal } : d));
+      const { id, fieldKey, finalVal, updated } = e.detail;
+      setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, ...(updated ?? { [fieldKey]: finalVal }) } : d));
       // Auto-refresh activity logs for this delivery
       await refreshActivityLogs(id);
     };
 
     window.addEventListener('delivery-updated', handleLocalUpdate);
     return () => window.removeEventListener('delivery-updated', handleLocalUpdate);
-  }, [initialDeliveries]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setters are stable
+  }, []);
 
   const statuses = ["ALL", ...STEPS];
 
-  // Derive unique factories from loaded deliveries
-  const factoryOptions = Array.from(
-    new Map(deliveries.filter((d: any) => d.factory).map((d: any) => [d.factory.id, d.factory])).values()
-  ) as any[];
-
-  const filtered = deliveries.filter((d: any) => {
-    if (statusFilter !== "ALL" && d.status !== statusFilter) return false;
-    if (factoryFilter !== "ALL" && d.factoryId !== factoryFilter) return false;
-    if (dateFrom) {
-      const dt = d.scheduledPickupTime ? new Date(d.scheduledPickupTime) : null;
-      if (!dt || dt < new Date(dateFrom)) return false;
-    }
-    if (dateTo) {
-      const dt = d.scheduledPickupTime ? new Date(d.scheduledPickupTime) : null;
-      const toEnd = new Date(dateTo);
-      toEnd.setHours(23, 59, 59, 999);
-      if (!dt || dt > toEnd) return false;
-    }
-    if (search) {
-      const s = search.toLowerCase();
-      return (
-        d.vehicleNumber?.toLowerCase().includes(s) ||
-        d.driverName?.toLowerCase().includes(s) ||
-        d.transporterName?.toLowerCase().includes(s) ||
-        d.masterRequest?.commodity?.toLowerCase().includes(s) ||
-        d.masterRequest?.cm?.name?.toLowerCase().includes(s)
-      );
-    }
-    return true;
-  });
+  // Filtering happens on the server; the status check here just drops optimistically-changed rows instantly
+  const filtered = useMemo(
+    () => (statusFilter === "ALL" ? deliveries : deliveries.filter((d: any) => d.status === statusFilter)),
+    [deliveries, statusFilter]
+  );
 
   const hasActiveFilters = factoryFilter !== "ALL" || dateFrom || dateTo || search;
 
@@ -859,8 +840,8 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
       // Optimistic update
       setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, status: nextStatus } : d));
       await updateDeliveryStatus(id, nextStatus as any);
+      reload();
       await refreshActivityLogs(id);
-      router.refresh();
     }
   };
 
@@ -870,8 +851,8 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
     // Optimistic update
     setDeliveries((prev) => prev.map((d: any) => d.id === id ? { ...d, status: prevStatus } : d));
     await undoDeliveryStatus(id);
+    reload();
     await refreshActivityLogs(id);
-    router.refresh();
   };
 
   const handleInvoiceConfirm = async (invoiceNo: string) => {
@@ -880,9 +861,9 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
     setDeliveries((prev) => prev.map((d: any) => d.id === invoicePromptDelivery.id ? { ...d, status: "IN_TRANSIT", invoiceNo } : d));
     await updateDelivery(invoicePromptDelivery.id, { invoiceNo });
     await updateDeliveryStatus(invoicePromptDelivery.id, "IN_TRANSIT" as any);
-    await refreshActivityLogs(invoicePromptDelivery.id);
+    reload();
     setInvoicePromptDelivery(null);
-    router.refresh();
+    await refreshActivityLogs(invoicePromptDelivery.id);
   };
 
   const handleCompleteConfirm = async (balanceAmount: number) => {
@@ -891,9 +872,9 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
     setDeliveries((prev) => prev.map((d: any) => d.id === completingDelivery.id ? { ...d, status: "COMPLETED", actuallyPaid: balanceAmount } : d));
     await updateDelivery(completingDelivery.id, { actuallyPaid: balanceAmount });
     await updateDeliveryStatus(completingDelivery.id, "COMPLETED" as any);
-    await refreshActivityLogs(completingDelivery.id);
+    reload();
     setCompletingDelivery(null);
-    router.refresh();
+    await refreshActivityLogs(completingDelivery.id);
   };
 
   const handleReceiptConfirm = async (receiptUrl: string) => {
@@ -902,9 +883,9 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
     setDeliveries((prev) => prev.map((d: any) => d.id === receiptPromptDelivery.id ? { ...d, status: "RECEIPT_SUBMITTED", receiptUrl } : d));
     await updateDelivery(receiptPromptDelivery.id, { receiptUrl });
     await updateDeliveryStatus(receiptPromptDelivery.id, "RECEIPT_SUBMITTED" as any);
-    await refreshActivityLogs(receiptPromptDelivery.id);
+    reload();
     setReceiptPromptDelivery(null);
-    router.refresh();
+    await refreshActivityLogs(receiptPromptDelivery.id);
   };
 
   const toggleActivity = async (entityId: string) => {
@@ -920,7 +901,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
   const handleExportExcel = async () => {
     setExporting(true);
     try {
-      const payload = await getDeliveriesExportData({ status: statusFilter });
+      const payload = await getDeliveriesExportData(listFilters);
       const byId = new Map(payload.deliveries.map((d: any) => [d.id, d]));
 
       const deliveryRows = payload.deliveries.map((d: any) => [
@@ -1049,7 +1030,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
 
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-gray-500">
-            {filtered.length} deliver{filtered.length !== 1 ? "ies" : "y"}
+            {total ?? filtered.length} deliver{(total ?? filtered.length) !== 1 ? "ies" : "y"}
           </p>
 
           <button
@@ -1064,15 +1045,11 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
       </div>
 
       {/* Delivery cards */}
-      <div className="space-y-3">
-        <AnimatePresence>
-          {filtered.map((del: any, index: number) => (
-            <motion.div
+      <div className={cn("space-y-3 transition-opacity", listLoading && "opacity-60")}>
+        {filtered.map((del: any) => (
+            <div
               key={del.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.05 }}
-              className="card-hover overflow-hidden"
+              className="card-hover overflow-hidden cv-auto"
             >
               <div
                 onClick={() => setExpandedId(expandedId === del.id ? null : del.id)}
@@ -1114,7 +1091,7 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                   </div>
                   {(() => {
                     const pickupDate = del.scheduledPickupTime || del.masterRequest?.pickupDate;
-                    const dateStr = pickupDate ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(new Date(pickupDate)) : null;
+                    const dateStr = pickupDate ? shortDateFmt.format(new Date(pickupDate)) : null;
                     const firstStop = del.masterRequest?.childPickups?.[0];
                     const firstStopName = firstStop
                       ? firstStop.pickupLocType === "BFH"
@@ -1587,9 +1564,8 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
                   </motion.div>
                 )}
               </AnimatePresence>
-            </motion.div>
+            </div>
           ))}
-        </AnimatePresence>
 
         {filtered.length === 0 && (
           <div className="card p-12 text-center">
@@ -1597,6 +1573,8 @@ export function DeliveriesClient({ deliveries: initialDeliveries, initialFilter,
             <p className="text-gray-500 dark:text-gray-400">No deliveries found</p>
           </div>
         )}
+
+        <LoadMore hasMore={hasMore} loading={loadingMore} onLoadMore={loadMore} />
       </div>
 
       {/* Complete Delivery Popup */}

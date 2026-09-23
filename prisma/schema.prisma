@@ -145,6 +145,9 @@ model MasterRequest {
   messages         RequestMessage[]
   urgentApprovals  UrgentApproval[]
 
+  @@index([cmId, createdAt])
+  @@index([status])
+  @@index([createdAt])
   @@map("master_requests")
 }
 
@@ -167,6 +170,8 @@ model ChildPickup {
   parent MasterRequest @relation(fields: [parentId], references: [id], onDelete: Cascade)
   center Center?       @relation(fields: [centerId], references: [id])
 
+  @@index([parentId, stopSequence])
+  @@index([centerId])
   @@map("child_pickups")
 }
 
@@ -207,6 +212,8 @@ model DeliveryDetail {
   factory       Factory?      @relation(fields: [factoryId], references: [id])
   createdBy     User?         @relation(fields: [createdById], references: [id])
 
+  @@index([status])
+  @@index([createdAt])
   @@map("delivery_details")
 }
 
@@ -223,6 +230,7 @@ model RequestMessage {
   masterRequest MasterRequest @relation(fields: [masterReqId], references: [id], onDelete: Cascade)
   sender        User          @relation(fields: [senderId], references: [id])
 
+  @@index([masterReqId, createdAt])
   @@map("request_messages")
 }
 
@@ -238,6 +246,8 @@ model ActivityLog {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([entityType, entityId, createdAt])
+  @@index([createdAt])
   @@map("activity_logs")
 }
 
@@ -251,6 +261,7 @@ model PushSubscription {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("push_subscriptions")
 }
 
@@ -272,5 +283,7 @@ model UrgentApproval {
   requestedBy   User          @relation("urgent_requests", fields: [requestedById], references: [id])
   resolvedBy    User?         @relation("urgent_resolutions", fields: [resolvedById], references: [id])
 
+  @@index([masterReqId, status])
+  @@index([status, createdAt])
   @@map("urgent_approvals")
 }

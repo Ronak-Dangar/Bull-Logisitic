@@ -98,7 +98,7 @@ export function DashboardClient({
               key={key}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: index * 0.1 }}
+              transition={{ duration: 0.2, delay: index * 0.04 }}
               className={`card p-3 ${href ? "cursor-pointer active:scale-[0.98] transition-transform" : ""}`}
               onClick={() => href && router.push(href)}
             >
@@ -122,7 +122,7 @@ export function DashboardClient({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.4 }}
+          transition={{ duration: 0.2, delay: 0.1 }}
           className="card p-5 lg:col-span-1"
         >
           <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
@@ -149,7 +149,7 @@ export function DashboardClient({
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${pct}%` }}
-                        transition={{ duration: 0.8, delay: 0.5 }}
+                        transition={{ duration: 0.5, delay: 0.1 }}
                         className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full"
                       />
                     </div>
@@ -164,7 +164,7 @@ export function DashboardClient({
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.5 }}
+          transition={{ duration: 0.2, delay: 0.12 }}
           className="card p-5 lg:col-span-2"
         >
           <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">
@@ -207,7 +207,7 @@ export function DashboardClient({
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.6 }}
+        transition={{ duration: 0.2, delay: 0.15 }}
         className="card p-5"
       >
         <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">

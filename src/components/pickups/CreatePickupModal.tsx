@@ -107,7 +107,7 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60"
         onClick={onClose}
       />
       <motion.div
@@ -118,7 +118,7 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
         className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-gray-50 dark:bg-gray-900 rounded-t-3xl sm:rounded-2xl z-10 flex flex-col shadow-2xl"
       >
         {/* Sticky Header */}
-        <div className="sticky top-0 z-30 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-5 py-4 flex items-center justify-between">
+        <div className="sticky top-0 z-30 bg-gray-50/95 dark:bg-gray-900/95 border-b border-gray-200 dark:border-gray-800 px-5 py-4 flex items-center justify-between">
           <h2 className="text-lg flex flex-col font-bold text-gray-900 dark:text-white">
             New Pickup Request
             {pickupDate && commodity && (
@@ -183,7 +183,7 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
 
             {/* Step 2: Stops */}
             <div>
-              <div className="flex items-center justify-between mb-3 sticky top-16 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-md z-20 py-2 -mx-5 px-5 border-y border-gray-200/50 dark:border-gray-800/50 shadow-sm">
+              <div className="flex items-center justify-between mb-3 sticky top-16 bg-gray-50/95 dark:bg-gray-900/95 z-20 py-2 -mx-5 px-5 border-y border-gray-200/50 dark:border-gray-800/50 shadow-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-bold text-xs flex items-center justify-center flex-shrink-0">2</div>
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Pickup Stops</h3>
@@ -361,7 +361,7 @@ export function CreatePickupModal({ centers, factories, onClose, onSuccess }: Cr
           <div className="h-28"></div>
 
           {/* Sticky Footer */}
-          <div className="sticky bottom-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-800 p-4 z-30 flex gap-3 pb-safe shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
+          <div className="sticky bottom-0 bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-800 p-4 z-30 flex gap-3 pb-safe shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
             <button type="button" onClick={handleCancel} className="btn-secondary flex-1 py-3 text-sm font-semibold">Cancel</button>
             <button type="submit" disabled={loading} className="btn-primary flex-1 py-3 text-sm font-semibold shadow-md active:scale-[0.98] transition-all">
               {loading ? (

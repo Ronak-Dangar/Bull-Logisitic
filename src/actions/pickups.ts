@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { logActivity } from "@/lib/audit";
 import { RequestStatus } from "@prisma/client";
 import { sendPushToRoles, sendPushToUser } from "@/lib/webpush";
+import { encodeCursor, afterCursor, clampTake, type Page } from "@/lib/pagination";
 
 // ─── Permission helper ───────────────────────────────────
 
@@ -44,59 +45,103 @@ async function notifyLMsOfCMActivity(
 }
 
 // ─── Get Pickups (with CM permission gate) ───────────────
+// Paginated + filtered server-side (see lib/pagination for the cursor).
 
-export async function getPickups(filters?: {
+const PICKUPS_PAGE_SIZE = 30;
+
+const pickupListInclude = {
+  cm: { select: { name: true, phone: true } },
+  approvedBy: { select: { name: true } },
+  factory: { select: { factoryName: true, location: true } },
+  childPickups: {
+    orderBy: { stopSequence: "asc" as const },
+    include: { center: { select: { centerName: true } } },
+  },
+  deliveryDetail: {
+    select: {
+      id: true,
+      status: true,
+      factory: { select: { factoryName: true } },
+    },
+  },
+  urgentApprovals: {
+    where: { status: "PENDING" as const },
+    select: { id: true, changeType: true, createdAt: true },
+  },
+  _count: { select: { childPickups: true, messages: true } },
+};
+
+export type PickupListFilters = {
   status?: string;
+  factoryId?: string;
+  from?: string; // ISO instant, inclusive
+  to?: string; // ISO instant, inclusive
   search?: string;
-}) {
+  cursor?: string | null;
+  take?: number;
+  ensureId?: string; // e.g. ?highlight= — included even if outside the first page
+};
+
+export async function getPickups(filters: PickupListFilters = {}) {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");
   const user = session.user as any;
 
-  const where: any = {};
+  const base: any = {};
+  // CM permission gate: only see their own requests
+  if (user.role === "CM") base.cmId = user.id;
 
-  // CM permission gate: only see requests with their centers
-  if (user.role === "CM") {
-    where.cmId = user.id;
+  const where: any = { ...base, AND: [] as any[] };
+  if (filters.status && filters.status !== "ALL") where.status = filters.status;
+  if (filters.factoryId && filters.factoryId !== "ALL") where.factoryId = filters.factoryId;
+  if (filters.from || filters.to) {
+    where.pickupDate = {
+      ...(filters.from && { gte: new Date(filters.from) }),
+      ...(filters.to && { lte: new Date(filters.to) }),
+    };
+  }
+  const search = filters.search?.trim();
+  if (search) {
+    where.AND.push({
+      OR: [
+        { commodity: { contains: search, mode: "insensitive" } },
+        { deliveryLocation: { contains: search, mode: "insensitive" } },
+        { cm: { name: { contains: search, mode: "insensitive" } } },
+      ],
+    });
   }
 
-  if (filters?.status && filters.status !== "ALL") {
-    where.status = filters.status;
+  const pageWhere = { ...where, AND: [...where.AND] };
+  if (filters.cursor) pageWhere.AND.push(afterCursor(filters.cursor));
+
+  const take = clampTake(filters.take, PICKUPS_PAGE_SIZE);
+  const [rows, total] = await Promise.all([
+    prisma.masterRequest.findMany({
+      where: pageWhere,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: take + 1,
+      include: pickupListInclude,
+    }),
+    filters.cursor ? Promise.resolve(null) : prisma.masterRequest.count({ where }),
+  ]);
+
+  const hasMore = rows.length > take;
+  const items = hasMore ? rows.slice(0, take) : rows;
+  const last = items[items.length - 1];
+
+  if (filters.ensureId && !filters.cursor && !items.some((r) => r.id === filters.ensureId)) {
+    const extra = await prisma.masterRequest.findFirst({
+      where: { ...base, id: filters.ensureId },
+      include: pickupListInclude,
+    });
+    if (extra) items.unshift(extra);
   }
 
-  if (filters?.search) {
-    where.OR = [
-      { commodity: { contains: filters.search, mode: "insensitive" } },
-      { deliveryLocation: { contains: filters.search, mode: "insensitive" } },
-      { cm: { name: { contains: filters.search, mode: "insensitive" } } },
-    ];
-  }
-
-  return prisma.masterRequest.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: {
-      cm: { select: { name: true, phone: true } },
-      approvedBy: { select: { name: true } },
-      factory: { select: { factoryName: true, location: true } },
-      childPickups: {
-        orderBy: { stopSequence: "asc" },
-        include: { center: { select: { centerName: true } } },
-      },
-      deliveryDetail: {
-        select: {
-          id: true,
-          status: true,
-          factory: { select: { factoryName: true } },
-        },
-      },
-      urgentApprovals: {
-        where: { status: "PENDING" },
-        select: { id: true, changeType: true, createdAt: true },
-      },
-      _count: { select: { childPickups: true, messages: true } },
-    },
-  });
+  return JSON.parse(JSON.stringify({
+    items,
+    nextCursor: hasMore && last ? encodeCursor(last.createdAt, last.id) : null,
+    total,
+  })) as Page<any>;
 }
 
 // ─── Get single pickup ──────────────────────────────────
